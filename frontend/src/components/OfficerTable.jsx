@@ -11,8 +11,6 @@ export default function OfficerTable({ officers = [], onEdit, onDelete, loading 
   if (!officers.length) {
     return <p className="empty-state">No officers found. Upload or add one to begin.</p>;
   }
-
-  // Role-aware: when the logged-in user may not edit/delete, hide the column entirely.
   const showActions = Boolean(onEdit) || Boolean(onDelete);
 
   return (

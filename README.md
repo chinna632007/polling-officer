@@ -247,6 +247,8 @@ index in MongoDB), and booth capacity is never exceeded.
 | GET | `/api/reports/officers-excel` | Officer list report (.xlsx) |
 | GET | `/api/reports/booths-excel` | Booth list report (.xlsx) |
 | GET | `/api/reports/allocation-excel` | Allocated officers report (.xlsx) |
+| GET | `/api/reports/allocation-by-mandal` | Allocated officers report, **one sheet per Mandal** (.xlsx) |
+| GET | `/api/reports/allocated-officers/:mandal` | Allocated officers for a single Mandal (.xlsx, case-insensitive) |
 | GET | `/api/reports/unallocated-officers` | Unallocated officers report (.xlsx) |
 | GET | `/api/reports/notifications-excel` | Notification status report (.xlsx) |
 | GET | `/api/dashboard/stats` | Dashboard statistics |

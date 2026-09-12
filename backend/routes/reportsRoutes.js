@@ -77,4 +77,38 @@ router.get('/notifications-excel', async (req, res, next) => {
   }
 });
 
+// GET /api/reports/allocation-by-mandal
+// A single workbook with ONE sheet per Mandal (each sheet = allocated officers
+// of that Mandal, sorted by Officer ID ascending). Officers are never mixed
+// across Mandals.
+router.get('/allocation-by-mandal', async (req, res, next) => {
+  try {
+    const scope = roleService.scopeFilter(req.user) || {};
+    sendWorkbook(
+      res,
+      await excelService.allocationReportByMandal(scope),
+      'allocation-by-mandal.xlsx'
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/reports/allocated-officers/:mandal
+// Downloadable allocated-officers list for a single Mandal. The :mandal param is
+// matched case-insensitively, so "Jami", "jami" and " JAMI " all match.
+router.get('/allocated-officers/:mandal', async (req, res, next) => {
+  try {
+    const scope = roleService.scopeFilter(req.user) || {};
+    const mandalName = decodeURIComponent(req.params.mandal || '');
+    sendWorkbook(
+      res,
+      await excelService.allocatedOfficersReportForMandal(scope, mandalName),
+      `allocated-${encodeURIComponent(String(mandalName || 'mandal')).replace(/[^a-z0-9]/gi, '_') || 'mandal'}.xlsx`
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

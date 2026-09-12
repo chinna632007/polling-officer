@@ -27,6 +27,7 @@ const STATUS = {
   PENDING: 'PENDING',
   SENT: 'SENT',
   FAILED: 'FAILED',
+  DEMO_SENT: 'DEMO_SENT',
 };
 
 const DEFAULT_PROVIDER_ID = 'mock';
@@ -135,18 +136,21 @@ function createProvider(providerName) {
  *   Booth Number / Booth Name / Booth Address / Mandal ...
  */
 function buildAllocationMessage(officer, booth) {
-  const addressLine = require('./addressMatchingService').boothAddressLine(booth);
+  const b = booth || {};
+  const o = officer || {};
   return [
-    `Dear ${officer.officerName},`,
+    `Dear ${o.officerName || o.name || 'Officer'},`,
     '',
-    'You have been allocated for Polling Duty.',
+    'You have been allocated for election duty.',
     '',
-    `Booth Number: ${booth.boothNumber}`,
-    `Booth Name: ${booth.boothName}`,
-    `Booth Address: ${addressLine}`,
-    `Mandal: ${booth.mandal}`,
+    `Booth Number: ${b.boothNumber || ''}`,
+    `Booth Name: ${b.boothName || ''}`,
+    `Building: ${b.buildingName || ''}`,
+    `Booth Locality: ${b.locality || ''}`,
+    `Mandal: ${b.mandal || o.mandal || ''}`,
     '',
-    'Please report according to official instructions.',
+    'Please report as instructed by the Election Administration.',
+    '',
     'Thank you.',
   ].join('\n');
 }
@@ -169,6 +173,9 @@ async function sendSms({ officer, allocation = null, message, providerName }) {
 
   const notification = await Notification.create({
     officer: officer._id,
+    officerName: officer.officerName || officer.name || '',
+    booth: allocation && allocation.booth ? allocation.booth : undefined,
+    mandal: (allocation && allocation.mandal) || officer.mandal || '',
     allocation: allocation ? allocation._id : undefined,
     mobileNumber: officer.mobileNumber,
     message,
@@ -179,14 +186,13 @@ async function sendSms({ officer, allocation = null, message, providerName }) {
   try {
     const result = await provider.send(officer.mobileNumber, message);
 
-    notification.status = result.delivered ? STATUS.SENT : STATUS.PENDING;
+    if (provider.name === 'mock') { notification.status = STATUS.DEMO_SENT; } else { notification.status = result.delivered ? STATUS.SENT : STATUS.PENDING; }
     notification.providerMessageId = result.messageId;
     notification.sentAt = new Date();
     await notification.save();
 
-    // A PENDING message from the mock provider is marked SENT shortly
-    // afterwards to fully emulate the real lifecycle.
-    if (!result.delivered && provider.name === 'mock') {
+    // A PENDING message from a real provider stays PENDING for retry.
+    if (!result.delivered && provider.name !== 'mock') {
       setTimeout(async () => {
         try {
           await Notification.updateOne(

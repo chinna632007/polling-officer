@@ -8,14 +8,11 @@ const { scopeFilter, notificationScopeFilter, escapeRegex } = require('../servic
 
 const STATUS = allocationService.STATUS; // ALLOCATED / CANCELLED / REALLOCATED
 
-/**
- * POST /api/allocation/run
- * Executes the full allocation algorithm against the REAL uploaded data.
- * Safe to re-run: officers with an existing ALLOCATED allocation are skipped.
- */
 async function runAllocation(req, res, next) {
   try {
-    const result = await allocationService.runAllocation();
+    const result = await allocationService.runAllocation({
+      maxAllocations: req.body ? req.body.maxAllocations : undefined,
+    });
     return res.json({
       success: true,
       message: 'Allocation completed successfully',
@@ -26,7 +23,6 @@ async function runAllocation(req, res, next) {
   }
 }
 
-/** Builds the allocations-list filter (status + mandal + role scope). */
 function buildAllocationFilter(req) {
   const filter = {};
   const { status, mandal } = req.query;
@@ -40,10 +36,6 @@ function buildAllocationFilter(req) {
   return filter;
 }
 
-/**
- * GET /api/allocation?status=&mandal=&page=&limit=
- * Returns every allocation (populated officer + booth), newest first.
- */
 async function getAllocations(req, res, next) {
   try {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -69,10 +61,6 @@ async function getAllocations(req, res, next) {
   }
 }
 
-/**
- * GET /api/allocation/mandals
- * Per-Mandal overview (officers, booths, required slots, allocated/cancelled).
- */
 async function getAllocationMandals(req, res, next) {
   try {
     const scope = scopeFilter(req.user);
@@ -155,10 +143,6 @@ async function getAllocationMandals(req, res, next) {
   }
 }
 
-/**
- * GET /api/allocation/suitable-booths/:officerId  (also /api/allocations/...)
- * Returns only ready-and-suitable booths for the officer.
- */
 async function getSuitableBooths(req, res, next) {
   try {
     const officerId = String(req.params.officerId || '').trim();
@@ -179,7 +163,25 @@ async function getSuitableBooths(req, res, next) {
   }
 }
 
-/** POST /api/allocation/:id/cancel */
+async function manualAllocateAction(req, res, next) {
+  try {
+    const { officerId, boothId } = req.body || {};
+    if (!officerId || !boothId) {
+      return res.status(400).json({ success: false, message: 'officerId and boothId are required' });
+    }
+    const result = await allocationService.manualAllocate(officerId, boothId);
+    return res.status(201).json({
+      success: true,
+      message: result.isFallback
+        ? 'Officer allocated with fallback (same-locality booth used)'
+        : 'Officer allocated successfully',
+      data: { allocation: result.allocation, booth: result.booth, isFallback: result.isFallback, reason: result.reason },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function cancelAllocationAction(req, res, next) {
   try {
     const result = await allocationService.cancelAllocation(req.params.id);
@@ -189,7 +191,6 @@ async function cancelAllocationAction(req, res, next) {
   }
 }
 
-/** POST /api/allocation/:id/reallocate */
 async function reallocateAllocation(req, res, next) {
   try {
     const preferredBoothId = req.body?.preferredBoothId || null;
@@ -201,6 +202,9 @@ async function reallocateAllocation(req, res, next) {
         newAllocation: result.newAllocation,
         oldAllocation: result.oldAllocation,
         chosenBooth: result.chosenBooth,
+        // Auto-created notification for the accepted booth (may be null if the
+        // SMS provider could not be reached - the reallocation still succeeded).
+        notification: result.notification,
       },
     });
   } catch (error) {
@@ -208,7 +212,6 @@ async function reallocateAllocation(req, res, next) {
   }
 }
 
-/** GET /api/dashboard/stats - admin dashboard statistics (requirement J). */
 async function getDashboardStats(req, res, next) {
   try {
     const scope = scopeFilter(req.user) || {};
@@ -238,8 +241,6 @@ async function getDashboardStats(req, res, next) {
     const totalBoothCapacity = confirmedCapacity[0]?.total || 0;
     const allocatedOfficers = allocatedCount;
     const unallocatedOfficers = Math.max(0, totalOfficers - allocatedOfficers);
-
-    // Per-Mandal breakdown for the dashboard grid.
     const deployed = await allocationService.getAllocationRows({ status: STATUS.ALLOCATED, ...scope });
     const mandalMap = new Map();
     deployed.forEach((a) => {
@@ -286,7 +287,6 @@ async function getDashboardStats(req, res, next) {
   }
 }
 
-/** DELETE /api/allocation/all - wipe every allocation and resync counters. */
 async function deleteAllAllocations(req, res, next) {
   try {
     const total = await Allocation.countDocuments();
@@ -302,7 +302,6 @@ async function deleteAllAllocations(req, res, next) {
   }
 }
 
-/** DELETE /api/allocation/mandal/:name - wipe one Mandal's allocations. */
 async function deleteAllocationsByMandal(req, res, next) {
   try {
     const name = String(req.params.name || '').trim();
@@ -331,6 +330,7 @@ module.exports = {
   getAllocations,
   getAllocationMandals,
   getSuitableBooths,
+  manualAllocateAction,
   cancelAllocationAction,
   reallocateAllocation,
   getDashboardStats,

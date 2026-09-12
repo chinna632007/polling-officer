@@ -4,7 +4,7 @@ import NotificationStatus from '../components/NotificationStatus';
 import Spinner from '../components/Spinner';
 import Toast from '../components/Toast';
 
-const STATUS_FILTERS = ['', 'PENDING', 'SENT', 'FAILED'];
+const STATUS_FILTERS = ['', 'PENDING', 'SENT', 'FAILED', 'DEMO_SENT'];
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState([]);
@@ -31,8 +31,17 @@ export default function Notifications() {
 
   useEffect(() => {
     fetchNotifications().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, status]);
+
+  const doResend = async (n) => {
+    try {
+      const { data } = await api.post(`/api/notifications/resend/${n._id}`);
+      setNotify({ message: data.message || `Notification ${data.data?.status || ''}`, type: 'success' });
+      fetchNotifications().catch(() => {});
+    } catch (err) {
+      setNotify({ message: getErrorMessage(err), type: 'error' });
+    }
+  };
 
   return (
     <div className="page">
@@ -77,7 +86,7 @@ export default function Notifications() {
       {loading && notifications.length === 0 ? (
         <Spinner label="Loading notifications…" />
       ) : (
-        <NotificationStatus notifications={notifications} loading={false} />
+        <NotificationStatus notifications={notifications} loading={false} onResend={doResend} />
       )}
 
       {pagination.pages > 1 && (

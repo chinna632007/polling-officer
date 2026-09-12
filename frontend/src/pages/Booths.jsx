@@ -20,14 +20,13 @@ const EMPTY_FORM = {
   district: '',
   pinCode: '',
   requiredOfficers: 1,
+  minOfficers: 1,
 };
 
 export default function Booths() {
   const { user } = useAuth();
   const canManage = canManageData(user);
   const isAdmin = isSuperAdmin(user);
-
-  // Booths grouped per Mandal (one section per uploaded file's Mandal).
   const [groups, setGroups] = useState([]);
   const [totalBooths, setTotalBooths] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -41,12 +40,8 @@ export default function Booths() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
-
-  // "Delete All" confirmation state (every booth on the page).
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
-
-  // "Delete Mandal" confirmation state (one section = one uploaded file).
   const [deleteMandalTarget, setDeleteMandalTarget] = useState(null);
   const [deletingMandal, setDeletingMandal] = useState(false);
 
@@ -90,6 +85,7 @@ export default function Booths() {
       district: booth.district || '',
       pinCode: booth.pinCode || '',
       requiredOfficers: booth.requiredOfficers,
+      minOfficers: booth.minOfficers ?? 1,
     });
     setModalOpen(true);
   };
@@ -98,7 +94,11 @@ export default function Booths() {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = { ...form, requiredOfficers: Number(form.requiredOfficers) };
+      const payload = {
+        ...form,
+        requiredOfficers: Number(form.requiredOfficers),
+        minOfficers: Number(form.minOfficers) || 0,
+      };
       if (editing) {
         await api.put(`/api/booths/${editing._id}`, payload);
         setNotify({ message: 'Booth updated successfully', type: 'success' });
@@ -194,7 +194,7 @@ export default function Booths() {
               onClick={() => setConfirmDeleteAll(true)}
               disabled={deletingAll || totalBooths === 0}
             >
-              🗑 Delete All
+              Delete All
             </button>
           ) : null}
           {canManage ? (
@@ -369,6 +369,16 @@ export default function Booths() {
                   value={form.requiredOfficers}
                   onChange={(e) => setForm({ ...form, requiredOfficers: e.target.value })}
                   required
+                />
+              </div>
+              <div className="form-group">
+                <label>Minimum Officers</label>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  value={form.minOfficers}
+                  onChange={(e) => setForm({ ...form, minOfficers: e.target.value })}
                 />
               </div>
               <div className="form-actions">

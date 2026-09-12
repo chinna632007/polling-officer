@@ -3,11 +3,6 @@ const Notification = require('../models/Notification');
 const smsService = require('../services/smsService');
 const { notificationScopeFilter } = require('../services/roleService');
 
-/**
- * POST /api/notifications/send/:allocationId
- * Builds the polling-duty message for the officer and sends it via the
- * configured SMS provider. Persists every notification status change.
- */
 async function sendAllocationNotification(req, res, next) {
   try {
     const allocation = await Allocation.findById(req.params.allocationId)
@@ -50,23 +45,16 @@ async function sendAllocationNotification(req, res, next) {
   }
 }
 
-/**
- * GET /api/notifications?status=&page=&limit=
- * A Mandal Officer only ever sees notifications belonging to officers inside
- * their assigned Mandal (enforced server-side).
- */
 async function getNotifications(req, res, next) {
   try {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const filter = {};
     if (req.query.status) filter.status = req.query.status;
-
-    // Scope notifications to the user's assigned officers (Mandal Officers).
     const notifScope = await notificationScopeFilter(req.user);
     Object.assign(filter, notifScope);
 
-    const query = Notification.find(filter).populate('officer').sort({ createdAt: -1 });
+    const query = Notification.find(filter).populate('officer').populate('booth').populate({ path: 'allocation', populate: { path: 'booth' } }).sort({ createdAt: -1 });
 
     const [data, total] = await Promise.all([
       query.skip((page - 1) * limit).limit(limit).lean(),
@@ -83,4 +71,31 @@ async function getNotifications(req, res, next) {
   }
 }
 
-module.exports = { sendAllocationNotification, getNotifications };
+async function resendNotification(req, res, next) {
+  try {
+    const Notification = require('../models/Notification');
+    const notification = await Notification.findById(req.params.id).populate('officer');
+    if (!notification) {
+      return res.status(404).json({ success: false, message: 'Notification not found' });
+    }
+    const smsService = require('../services/smsService');
+    const provider = smsService.createProvider();
+    try {
+      const result = await provider.send(notification.mobileNumber, notification.message);
+      notification.status = provider.name === 'mock' ? smsService.STATUS.DEMO_SENT : (result.delivered ? 'SENT' : 'PENDING');
+      notification.providerMessageId = result.messageId;
+      notification.sentAt = new Date();
+      notification.error = undefined;
+      await notification.save();
+    } catch (error) {
+      notification.status = 'FAILED';
+      notification.error = error.message;
+      await notification.save();
+    }
+    return res.json({ success: true, message: 'Notification re-sent with status ' + notification.status, data: notification });
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { sendAllocationNotification, getNotifications, resendNotification };

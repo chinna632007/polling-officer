@@ -11,8 +11,6 @@ export default function BoothTable({ booths = [], onEdit, onDelete, loading }) {
   if (!booths.length) {
     return <p className="empty-state">No booths found. Upload or add one to begin.</p>;
   }
-
-  // Role-aware: when the logged-in user may not edit/delete, hide the column entirely.
   const showActions = Boolean(onEdit) || Boolean(onDelete);
 
   return (
@@ -27,7 +25,8 @@ export default function BoothTable({ booths = [], onEdit, onDelete, loading }) {
             <th>Locality</th>
             <th>Ward</th>
             <th>Mandal</th>
-            <th>Required</th>
+            <th>Min</th>
+            <th>Max</th>
             <th>Allocated</th>
             {showActions ? <th className="col-actions">Actions</th> : null}
           </tr>
@@ -48,6 +47,7 @@ export default function BoothTable({ booths = [], onEdit, onDelete, loading }) {
                 <td>
                   <Badge>{b.mandal || '—'}</Badge>
                 </td>
+                <td className="mono">{b.minOfficers ?? 1}</td>
                 <td className="mono">{b.requiredOfficers}</td>
                 <td>
                   <Badge tone={vacant > 0 ? 'amber' : 'green'}>

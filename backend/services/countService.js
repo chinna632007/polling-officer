@@ -16,7 +16,6 @@ const Booth = require('../models/Booth');
 
 const ACTIVE_STATUS = 'ALLOCATED';
 
-/** Maps boothId -> number of live (ALLOCATED) allocation documents. */
 async function computeBoothCountsMap() {
   const rows = await Allocation.aggregate([
     { $match: { status: ACTIVE_STATUS, booth: { $ne: null } } },
@@ -27,24 +26,19 @@ async function computeBoothCountsMap() {
   return map;
 }
 
-/** Live allocated count for a single booth (from allocation documents). */
 async function getLiveAllocatedCount(boothId) {
   if (!boothId) return 0;
   return Allocation.countDocuments({ booth: boothId, status: ACTIVE_STATUS });
 }
 
-/**
- * Recalculates a single booth's counters from the actual active allocations:
- *   allocatedOfficerCount = live allocations
- *   availableSlots        = requiredOfficers - allocatedOfficerCount
- * Both are clamped so counts can never go negative or above capacity.
- */
 async function recalculateBoothCounts(boothId) {
   if (!boothId) return 0;
   const booth = await Booth.findById(boothId);
   if (!booth) return 0;
-  const required = Math.max(0, booth.requiredOfficers || 0);
+  const rawReq = Number(booth.requiredOfficers);
+  const required = Number.isInteger(rawReq) && rawReq > 0 ? rawReq : 4;
   const allocated = Math.min(await getLiveAllocatedCount(booth._id), required);
+  if (booth.requiredOfficers !== required) { try { await Booth.updateOne({ _id: booth._id }, { $set: { requiredOfficers: required } }); } catch (e) {} }
   const availableSlots = Math.max(0, required - allocated);
   await Booth.updateOne(
     { _id: booth._id },
@@ -53,7 +47,6 @@ async function recalculateBoothCounts(boothId) {
   return allocated;
 }
 
-/** Rebuilds every booth's counters from the allocation collection. */
 async function resyncAllBoothCounts() {
   const map = await computeBoothCountsMap();
   const booths = await Booth.find({}).select('_id requiredOfficers allocatedOfficerCount availableSlots').lean();

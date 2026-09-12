@@ -48,14 +48,12 @@ export function AuthProvider({ children }) {
 
   const value = {
     user,
-    // Backward-compatible alias (older components read `admin`).
     admin: user,
     isAuthenticated,
     isBootstrapMode: false,
     bootstrapChecked: true,
     login,
     logout,
-    // Role helpers.
     role: user?.role,
     roleLabel: user ? roleLabel(user.role) : '',
     homePath: homeForRole(user?.role),

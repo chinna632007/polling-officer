@@ -15,8 +15,6 @@ export async function docDownload(url, fallbackName = 'report') {
   }
 
   const blob = await response.blob();
-
-  // Preferred: server-provided name (attachment; filename="x.xlsx").
   let filename = '';
   const disposition = response.headers.get('Content-Disposition') || '';
   const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);

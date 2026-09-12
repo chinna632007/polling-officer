@@ -241,6 +241,16 @@ function boothAddressLine(booth) {
     .join(', ');
 }
 
+function addressSimilarityScore(officer, booth) {
+  const parts = (o) => [o && o.locality, o && o.street, o && o.ward].filter(Boolean).join(' ');
+  const a = normalizeAddress(parts(officer));
+  const b = normalizeAddress(parts(booth));
+  if (!a || !b) return 0;
+  if (a === b) return 100;
+  const d = levenshtein(a, b);
+  return Math.max(0, Math.round((1 - d / Math.max(a.length, b.length)) * 100));
+}
+
 module.exports = {
   STOPWORDS,
   STRONG_SIMILARITY,
@@ -256,4 +266,5 @@ module.exports = {
   compatibilityReason,
   isAllocationBlocked,
   boothAddressLine,
+  addressSimilarityScore,
 };

@@ -435,6 +435,25 @@ a { color: var(--primary); text-decoration: none; }
   padding: 12px;
 }
 .realloc-box h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); margin-bottom: 6px; }
+.realloc-box-accepted { border-color: var(--success, #16a34a); background: color-mix(in srgb, var(--success, #16a34a) 8%, var(--card)); }
+
+/* Accepted-booth notification section inside the reallocate modal */
+.notif-section {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--bg);
+}
+.notif-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.notif-message { max-width: none; margin-top: 8px; font-size: 12.5px; }
 
 /* ==========================================================================
    TABLES
@@ -708,6 +727,14 @@ a { color: var(--primary); text-decoration: none; }
 
 .report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
 .report-card { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.mandal-download-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+.mandal-download-row .input { flex: 1 1 160px; }
+.mandal-download-row .btn { flex-shrink: 0; }
 .report-icon { font-size: 28px; }
 .report-desc { font-size: 13px; color: var(--text-muted); flex: 1; }
 
@@ -816,6 +843,27 @@ a { color: var(--primary); text-decoration: none; }
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 16px;
+/* Mandal-wise allocation page */
+.page-section { display: flex; flex-direction: column; gap: 14px; }
+.mandal-wise { display: flex; flex-direction: column; gap: 14px; }
+
+.unallocated-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+.unallocated-summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--red);
+  background: var(--red-bg);
+  user-select: none;
+}
+.unallocated-summary::marker { color: var(--red); }
   align-items: start;
 }
 

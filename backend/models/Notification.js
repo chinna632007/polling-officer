@@ -1,14 +1,13 @@
 ﻿const mongoose = require('mongoose');
 
-const NOTIFICATION_STATUSES = ['PENDING', 'SENT', 'FAILED'];
+const NOTIFICATION_STATUSES = ['PENDING', 'SENT', 'FAILED', 'DEMO_SENT'];
 
-/**
- * Persists every SMS that the system attempts to send, together with its
- * current delivery status, so administrators can audit who was informed.
- */
 const notificationSchema = new mongoose.Schema(
   {
     officer: { type: mongoose.Schema.Types.ObjectId, ref: 'Officer', required: true },
+    officerName: { type: String, trim: true, default: '' },
+    booth: { type: mongoose.Schema.Types.ObjectId, ref: 'Booth', default: null },
+    mandal: { type: String, trim: true, default: '' },
     allocation: { type: mongoose.Schema.Types.ObjectId, ref: 'Allocation' },
     mobileNumber: { type: String, required: true, trim: true },
     message: { type: String, required: true, trim: true },
@@ -31,3 +30,4 @@ notificationSchema.index({ createdAt: -1 });
 
 module.exports =
   mongoose.models.Notification || mongoose.model('Notification', notificationSchema);
+module.exports.NOTIFICATION_STATUSES = NOTIFICATION_STATUSES;

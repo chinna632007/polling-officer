@@ -48,32 +48,32 @@ export default function Dashboard() {
       {stats ? (
         <>
           <div className="stat-grid">
-            <StatCard label="Total Officers" value={stats.totalOfficers} icon="👤" tone="navy" />
-            <StatCard label="Total Booths" value={stats.totalBooths} icon="🏛️" tone="blue" />
+            <StatCard label="Total Officers" value={stats.totalOfficers} tone="navy" />
+            <StatCard label="Total Booths" value={stats.totalBooths} tone="blue" />
             <StatCard
               label="Allocated Officers"
               value={stats.allocatedOfficers}
-              icon="✅"
+             
               tone="green"
               sub={`of ${stats.totalBoothCapacity} booth slots`}
             />
             <StatCard
               label="Unallocated Officers"
               value={stats.unallocatedOfficers}
-              icon="⚠️"
+             
               tone="red"
             />
             <StatCard
               label="Required Booth Slots"
               value={stats.totalBoothCapacity}
-              icon="🪑"
+             
               tone="blue"
               sub={`${stats.availableSlots} still open`}
             />
             <StatCard
               label="Notifications Sent"
               value={stats.notificationsSent}
-              icon="✉️"
+             
               tone="purple"
             />
           </div>

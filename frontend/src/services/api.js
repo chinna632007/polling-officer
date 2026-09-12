@@ -9,16 +9,7 @@ import axios from 'axios';
 
 const baseURL =
   (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '') || '';
-
-// NOTE: Do NOT set a default Content-Type here. With a global
-// 'application/json' header, Axios 1.x serializes FormData bodies to JSON
-// (formDataToJSON) instead of multipart/form-data, so file uploads break
-// (multer never receives the file -> "No Excel file uploaded" error).
-// Axios picks the correct Content-Type per request automatically:
-// application/json for object bodies, multipart/form-data for FormData.
 const api = axios.create({ baseURL });
-
-// Request interceptor: attach the stored JWT
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -26,8 +17,6 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
-
-// Response interceptor: central 401 handling
 api.interceptors.response.use(
   (response) => response,
   (error) => {

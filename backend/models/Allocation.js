@@ -13,6 +13,9 @@ const allocationSchema = new mongoose.Schema(
     mandal: { type: String, trim: true, default: '' },
     status: { type: String, enum: ALLOCATION_STATUSES, default: 'ALLOCATED' },
     allocationReason: { type: String, trim: true, default: '' },
+    isFallback: { type: Boolean, default: false },
+    fallbackReason: { type: String, trim: true, default: '' },
+    newBoothId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booth', default: null },
     allocationDate: { type: Date, default: Date.now },
     addressMatchScore: { type: Number, default: 0, min: 0, max: 100 },
     addressValidationReason: { type: String, default: '' },
@@ -27,9 +30,6 @@ const allocationSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
-// DB-level protection: an officer may hold at most ONE active (ALLOCATED)
-// allocation at any time. CANCELLED / REALLOCATED records do not count.
 allocationSchema.index(
   { officer: 1 },
   { unique: true, partialFilterExpression: { status: { $nin: ['CANCELLED', 'REALLOCATED'] } } }

@@ -11,7 +11,7 @@
  *
  * Usage: node scripts/verify-auth.js
  */
-const BASE = (process.env.API_BASE || 'http://127.0.0.1:5000').replace(/\/$/, '');
+const BASE = (process.env.API_BASE || 'http://127.0.0.1:5001').replace(/\/$/, '');
 let failures = 0;
 
 function check(name, condition, detail = '') {

@@ -27,8 +27,6 @@ export default function Officers() {
   const { user } = useAuth();
   const canManage = canManageData(user);
   const isAdmin = isSuperAdmin(user);
-
-  // Officers grouped per Mandal (one section per uploaded file's Mandal).
   const [groups, setGroups] = useState([]);
   const [totalOfficers, setTotalOfficers] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -42,12 +40,8 @@ export default function Officers() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
-
-  // "Delete All" confirmation state (every officer on the page).
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
-
-  // "Delete Mandal" confirmation state (one section = one uploaded file).
   const [deleteMandalTarget, setDeleteMandalTarget] = useState(null);
   const [deletingMandal, setDeletingMandal] = useState(false);
 
@@ -196,7 +190,7 @@ export default function Officers() {
               onClick={() => setConfirmDeleteAll(true)}
               disabled={deletingAll || totalOfficers === 0}
             >
-              🗑 Delete All
+              Delete All
             </button>
           ) : null}
           {canManage ? (

@@ -9,14 +9,10 @@ import api, { getErrorMessage } from '../services/api';
 export default function UploadExcel() {
   const [imported, setImported] = useState(null);
   const [notify, setNotify] = useState(null);
-
-  // Uploaded-file history (one row per committed Excel file).
   const [uploads, setUploads] = useState([]);
   const [uploadsLoading, setUploadsLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
-
-  // "Delete All Files" confirmation state.
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
 
@@ -127,7 +123,7 @@ export default function UploadExcel() {
               onClick={fetchUploads}
               disabled={uploadsLoading || clearing}
             >
-              ↻ Refresh
+              Refresh
             </button>
             {uploads.length > 0 ? (
               <button
@@ -136,7 +132,7 @@ export default function UploadExcel() {
                 onClick={() => setConfirmClear(true)}
                 disabled={clearing || deleting}
               >
-                🗑 Delete All Files
+                Delete All Files
               </button>
             ) : null}
           </div>
@@ -163,7 +159,7 @@ export default function UploadExcel() {
               <tbody>
                 {uploads.map((u) => (
                   <tr key={u.id}>
-                    <td className="file-name">📄 {u.fileName}</td>
+                    <td className="file-name">{u.fileName}</td>
                     <td>
                       <Badge tone={u.kind === 'booths' ? 'blue' : 'purple'}>
                         {u.kind === 'booths' ? 'Booths' : 'Officers'}

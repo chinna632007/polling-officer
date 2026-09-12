@@ -1,22 +1,8 @@
-/**
- * excelService.js
- * ================
- * All Excel responsibilities live here:
- *   1. Validate required columns + row data.
- *   2. Read Excel rows and map them to the MongoDB schemas.
- *   3. Preview imported data.
- *   4. Save officers / booths into MongoDB (duplicate-ID safe).
- *   5. Generate & download sample templates and allocation reports.
- */
 
 const XLSX = require('xlsx');
 const Officer = require('../models/Officer');
 const Booth = require('../models/Booth');
 const Notification = require('../models/Notification');
-
-// ---------------------------------------------------------------------------
-// Column definitions (must match the specification exactly)
-// ---------------------------------------------------------------------------
 
 const OFFICER_COLUMNS = [
   'Officer ID',
@@ -45,9 +31,8 @@ const BOOTH_COLUMNS = [
   'District',
   'PIN Code',
   'Required Officers',
-];
-
-// Excel header  ->  DB field
+  'Minimum Officers',
+]
 const OFFICER_MAP = {
   'Officer ID': 'officerId',
   'Officer Name': 'officerName',
@@ -75,7 +60,8 @@ const BOOTH_MAP = {
   District: 'district',
   'PIN Code': 'pinCode',
   'Required Officers': 'requiredOfficers',
-};
+  'Minimum Officers': 'minOfficers',
+}
 
 const REQUIRED_OFFICER_COLUMNS = [
   'Officer ID',
@@ -93,10 +79,6 @@ const REQUIRED_BOOTH_COLUMNS = [
   'Village/Locality',
   'Mandal',
 ];
-
-// ---------------------------------------------------------------------------
-// Generic helpers
-// ---------------------------------------------------------------------------
 
 function isMissing(value) {
   return (
@@ -117,16 +99,10 @@ function normalizeHeader(header) {
     .replace(/\s+/g, ' ');
 }
 
-/**
- * Tolerant header key: lowercase with every non-alphanumeric character
- * removed, so 'Village/Locality', 'Village / Locality', 'village locality'
- * and 'Village_Locality' are all treated as the same required column.
- */
 function canonicalHeader(header) {
   return String(header || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-/** Maps the raw row (keyed by Excel headers) to the DB field shape. */
 function mapRow(row, mapping) {
   const result = {};
   const keys = Object.keys(row);
@@ -138,14 +114,7 @@ function mapRow(row, mapping) {
   });
   return result;
 }
-// ---------------------------------------------------------------------------
-// Validation + parsing
-// ---------------------------------------------------------------------------
 
-/**
- * Validates an array of raw Excel rows for the OFFICER sheet.
- * Returns { valid, missingColumns, errors, preview }.
- */
 function validateAndParseOfficers(rows) {
   const errors = [];
   const seenIds = new Set();
@@ -162,7 +131,6 @@ function validateAndParseOfficers(rows) {
 
   rows.forEach((rawRow, index) => {
     const row = mapRow(rawRow, OFFICER_MAP);
-    // Ignore fully empty rows (stray blank rows are common in Excel files).
     if (Object.values(row).every((value) => isMissing(value))) return;
     const lineNo = index + 2; // 1-based + header row
 
@@ -212,9 +180,6 @@ function validateAndParseOfficers(rows) {
   };
 }
 
-/**
- * Validates an array of raw Excel rows for the BOOTH sheet.
- */
 function validateAndParseBooths(rows) {
   const errors = [];
   const seenIds = new Set();
@@ -231,7 +196,6 @@ function validateAndParseBooths(rows) {
 
   rows.forEach((rawRow, index) => {
     const row = mapRow(rawRow, BOOTH_MAP);
-    // Ignore fully empty rows (stray blank rows are common in Excel files).
     if (Object.values(row).every((value) => isMissing(value))) return;
     const lineNo = index + 2;
 
@@ -249,13 +213,27 @@ function validateAndParseBooths(rows) {
     if (!isMissing(row.pinCode) && !/^\d{6}$/.test(String(row.pinCode))) {
       errors.push(`Row ${lineNo}: PIN Code must be a 6-digit number`);
     }
-    if (isMissing(row.requiredOfficers)) {
-      errors.push(`Row ${lineNo}: Required Officers is required`);
-    } else {
+    let requiredOfficers = 4;
+    try { const d = require('../models/Booth').DEFAULT_REQUIRED_OFFICERS; if (Number.isInteger(d) && d > 0) requiredOfficers = d; } catch (e) {}
+    if (process.env.DEFAULT_REQUIRED_OFFICERS && Number.isInteger(Number(process.env.DEFAULT_REQUIRED_OFFICERS)) && Number(process.env.DEFAULT_REQUIRED_OFFICERS) > 0) { requiredOfficers = Number(process.env.DEFAULT_REQUIRED_OFFICERS); }
+    if (!isMissing(row.requiredOfficers)) {
       const parsed = Number(row.requiredOfficers);
-      if (Number.isNaN(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
-        errors.push(`Row ${lineNo}: Required Officers must be a non-negative integer`);
+      if (Number.isNaN(parsed) || parsed <= 0 || !Number.isInteger(parsed)) {
+        errors.push(`Row ${lineNo}: Required Officers must be a positive integer (or blank for default 4)`);
+      } else { requiredOfficers = parsed; }
+    }
+
+    let minOfficers = 0;
+    if (!isMissing(row.minOfficers)) {
+      const parsedMin = Number(row.minOfficers);
+      if (Number.isNaN(parsedMin) || parsedMin < 0 || !Number.isInteger(parsedMin)) {
+        errors.push(`Row ${lineNo}: Minimum Officers must be a non-negative integer`);
+      } else {
+        minOfficers = parsedMin;
       }
+    }
+    if (minOfficers > requiredOfficers) {
+      errors.push(`Row ${lineNo}: Minimum Officers cannot be greater than Required Officers`);
     }
 
     mapped.push({
@@ -270,7 +248,8 @@ function validateAndParseBooths(rows) {
       mandal: asString(row.mandal),
       district: asString(row.district),
       pinCode: asString(row.pinCode),
-      requiredOfficers: Number(row.requiredOfficers),
+      requiredOfficers,
+      minOfficers,
     });
   });
 
@@ -282,14 +261,7 @@ function validateAndParseBooths(rows) {
     preview: mapped.slice(0, 50),
   };
 }
-// ---------------------------------------------------------------------------
-// Persisting validated data
-// ---------------------------------------------------------------------------
 
-/**
- * Saves validated officer rows. Duplicate Officer IDs are skipped and
- * counted so a re-upload of the same file never creates duplicates.
- */
 async function saveOfficersFromRows(mappedRows) {
   let inserted = 0;
   let skipped = 0;
@@ -310,7 +282,6 @@ async function saveOfficersFromRows(mappedRows) {
   return { inserted, skipped, count: saved.length, saved };
 }
 
-/** Saves validated booth rows; duplicate Booth IDs are skipped. */
 async function saveBoothsFromRows(mappedRows) {
   let inserted = 0;
   let skipped = 0;
@@ -329,11 +300,6 @@ async function saveBoothsFromRows(mappedRows) {
   return { inserted, skipped, count: saved.length, saved };
 }
 
-// ---------------------------------------------------------------------------
-// XLSX buffer helpers
-// ---------------------------------------------------------------------------
-
-/** Converts an array of JSON objects into an XLSX file buffer. */
 function toXlsxBuffer(rows, sheetName = 'Sheet1') {
   const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Info: 'No data' }]);
   const workbook = XLSX.utils.book_new();
@@ -341,7 +307,19 @@ function toXlsxBuffer(rows, sheetName = 'Sheet1') {
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 }
 
-/** Builds a template workbook with realistic sample rows for officers or booths. */
+/**
+ * Builds a workbook from { sheetName, rows }[] so reports can export one sheet
+ * per Mandal while keeping a single file download.
+ */
+function toWorkbookBuffer(sheets) {
+  const workbook = XLSX.utils.book_new();
+  (sheets || []).forEach((s) => {
+    const worksheet = XLSX.utils.json_to_sheet((s.rows && s.rows.length ? s.rows : [{ Info: 'No data' }]));
+    XLSX.utils.book_append_sheet(workbook, worksheet, String(s.sheetName || 'Sheet1'));
+  });
+  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+}
+
 function buildTemplate(kind) {
   const sampleRows =
     kind === 'officers'
@@ -402,6 +380,7 @@ function buildTemplate(kind) {
             District: 'Kurnool',
             'PIN Code': '518443',
             'Required Officers': 3,
+            'Minimum Officers': 1,
           },
           {
             'Booth ID': 'BOOTH002',
@@ -415,6 +394,7 @@ function buildTemplate(kind) {
             District: 'Kurnool',
             'PIN Code': '518445',
             'Required Officers': 2,
+            'Minimum Officers': 1,
           },
           {
             'Booth ID': 'BOOTH003',
@@ -428,17 +408,13 @@ function buildTemplate(kind) {
             District: 'Kurnool',
             'PIN Code': '518442',
             'Required Officers': 2,
+            'Minimum Officers': 1,
           },
         ];
 
   return toXlsxBuffer(sampleRows, kind === 'officers' ? 'Officers' : 'Booths');
 }
-// ---------------------------------------------------------------------------
-// Reports
-// ---------------------------------------------------------------------------
 
-/** Officer List (all officers) -> XLSX buffer */
-/** Officer master list -> XLSX buffer (filter = role-scoped query). */
 async function officerReport(filter = {}) {
   const officers = await Officer.find(filter).sort({ officerId: 1 }).lean();
   const rows = officers.map((o) => ({
@@ -458,7 +434,6 @@ async function officerReport(filter = {}) {
   return toXlsxBuffer(rows, 'Officers');
 }
 
-/** Booth List -> XLSX buffer (filter = role-scoped query). */
 async function boothReport(filter = {}) {
   const booths = await Booth.find(filter).sort({ boothId: 1 }).lean();
   const rows = booths.map((b) => ({
@@ -479,34 +454,102 @@ async function boothReport(filter = {}) {
   return toXlsxBuffer(rows, 'Booths');
 }
 
-/** Allocated Officers report -> every ALLOCATED allocation with a booth. */
+/**
+ * Shared row builder: officer details + allocated booth details + capacity.
+ * Used by both the flat and the mandal-wise allocation reports so the columns
+ * and ordering are always identical.
+ */
+function rowForAllocation(a) {
+  const required = Math.max(0, Number(a.booth?.requiredOfficers) || 0);
+  const allocated = Math.max(0, Number(a.booth?.allocatedOfficerCount) || 0);
+  return {
+    'Officer ID': a.officer?.officerId || '',
+    'Officer Name': a.officer?.officerName || '',
+    Designation: a.officer?.designation || '',
+    'Mobile Number': a.officer?.mobileNumber || '',
+    'Officer House No': a.officer?.houseNumber || '',
+    'Officer Street': a.officer?.street || '',
+    'Officer Locality': a.officer?.locality || '',
+    'Officer Ward': a.officer?.ward || '',
+    'Officer Mandal': a.officer?.mandal || '',
+    'Booth Number': a.booth?.boothNumber || '',
+    'Booth Name': a.booth?.boothName || '',
+    'Booth Building': a.booth?.buildingName || '',
+    'Booth Street': a.booth?.street || '',
+    'Booth Locality': a.booth?.locality || '',
+    'Booth Ward': a.booth?.ward || '',
+    'Booth Mandal': a.booth?.mandal || '',
+    'Required Officers': required,
+    'Allocated Officers': allocated,
+    'Available Slots': Math.max(0, required - allocated),
+    'Allocation Status': a.status,
+    'Address Match Score': a.addressMatchScore,
+    'Allocation Date': a.allocationDate ? new Date(a.allocationDate).toISOString() : '',
+  };
+}
+
 async function allocationReport(filter = {}) {
   const allocations = await getAllocationRowsForReport({
     status: 'ALLOCATED',
     booth: { $ne: null },
     ...filter,
   });
-  const rows = allocations.map((a) => ({
-    'Allocation ID': a.allocationId,
-    'Officer ID': a.officer?.officerId || '',
-    'Officer Name': a.officer?.officerName || '',
-    Designation: a.officer?.designation || '',
-    'Mobile Number': a.officer?.mobileNumber || '',
-    'Officer Locality': a.officer?.locality || '',
-    'Officer Ward': a.officer?.ward || '',
-    'Booth Number': a.booth?.boothNumber || '',
-    'Booth Name': a.booth?.boothName || '',
-    'Booth Locality': a.booth?.locality || '',
-    'Booth Ward': a.booth?.ward || '',
-    Mandal: a.mandal || '',
-    'Allocation Status': a.status,
-    'Address Match Score': a.addressMatchScore,
-    'Allocation Date': a.allocationDate ? new Date(a.allocationDate).toISOString() : '',
-  }));
+  const rows = allocations
+    .sort((x, y) => String(x.officer?.officerId || '').localeCompare(String(y.officer?.officerId || '')))
+    .map(rowForAllocation);
   return toXlsxBuffer(rows, 'Allocations');
 }
 
-/** Unallocated Officers report: officers with no active ALLOCATED allocation. */
+/**
+ * Mandal-wise allocation report: a single workbook with one sheet per Mandal.
+ * Each sheet lists the ALLOCATED officers of that Mandal, sorted by Officer ID
+ * ascending. Officers are NEVER mixed across Mandals.
+ */
+async function allocationReportByMandal(filter = {}) {
+  const allocations = await getAllocationRowsForReport({
+    status: 'ALLOCATED',
+    booth: { $ne: null },
+    ...filter,
+  });
+  const sheets = new Map();
+  allocations.forEach((a) => {
+    const mandal = (a.officer?.mandal || a.mandal || 'Unknown').trim();
+    if (!sheets.has(mandal)) sheets.set(mandal, []);
+    sheets.get(mandal).push(a);
+  });
+  const workbookSheets = [];
+  let idx = 0;
+  for (const [mandal, rows] of sheets) {
+    const sorted = rows
+      .sort((x, y) => String(x.officer?.officerId || '').localeCompare(String(y.officer?.officerId || '')))
+      .map(rowForAllocation);
+    workbookSheets.push({ sheetName: `Mandal_${++idx}`, rows: sorted });
+  }
+  return toWorkbookBuffer(workbookSheets);
+}
+
+/**
+ * Single-Mandal downloadable allocated-officers list.
+ * `mandalName` is matched case-insensitively (and trim-insensitive) so that
+ * "Jami", "jami" and " JAMI " all resolve to the same Mandal.
+ */
+async function allocatedOfficersReportForMandal(filter = {}, mandalName = '') {
+  const target = String(mandalName || '').trim().toLowerCase();
+  const base = await getAllocationRowsForReport({
+    status: 'ALLOCATED',
+    booth: { $ne: null },
+    ...filter,
+  });
+  const matched = base.filter((a) => {
+    const m = (a.officer?.mandal || a.mandal || '').trim().toLowerCase();
+    return m === target;
+  });
+  const rows = matched
+    .sort((x, y) => String(x.officer?.officerId || '').localeCompare(String(y.officer?.officerId || '')))
+    .map(rowForAllocation);
+  return toXlsxBuffer(rows, `Allocated_${String(mandalName || 'mandal').replace(/[^a-z0-9]/gi, '_').slice(0, 20) || 'mandal'}`);
+}
+
 async function unallocatedOfficersReport(filter = {}) {
   const Officer = require('../models/Officer');
   const Allocation = require('../models/Allocation');
@@ -531,7 +574,6 @@ async function unallocatedOfficersReport(filter = {}) {
   return toXlsxBuffer(rows, 'Unallocated Officers');
 }
 
-/** Notification Status report. */
 async function notificationReport(filter = {}) {
   const notifications = await Notification.find(filter)
     .populate('officer')
@@ -550,10 +592,6 @@ async function notificationReport(filter = {}) {
   return toXlsxBuffer(rows, 'Notifications');
 }
 
-/**
- * Shared query helper so report controllers and the allocation service use
- * the exact same population logic.
- */
 async function getAllocationRowsForReport(filter = {}) {
   const Allocation = require('../models/Allocation');
   return Allocation.find(filter)
@@ -577,9 +615,11 @@ module.exports = {
   saveBoothsFromRows,
   toXlsxBuffer,
   buildTemplate,
-  officerReport,
+    officerReport,
   boothReport,
   allocationReport,
+  allocationReportByMandal,
+  allocatedOfficersReportForMandal,
   unallocatedOfficersReport,
   notificationReport,
 };

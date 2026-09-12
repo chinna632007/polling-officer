@@ -42,7 +42,7 @@ export default function BoothWiseAllocation({ booths = [], allocationsByBooth = 
                 </span>
               </button>
               <span className={`badge badge-${available > 0 ? 'amber' : 'green'}`}>
-                {allocated}/{required} allocated · {available} slot{available === 1 ? '' : 's'} free
+                {allocated}/{required} allocated (min {b.minOfficers ?? 1}) · {available} slot{available === 1 ? '' : 's'} free
               </span>
             </header>
             <div className="booth-meta muted">

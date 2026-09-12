@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import api, { getErrorMessage } from '../services/api';
 import AllocationTable from '../components/AllocationTable';
 import BoothWiseAllocation from '../components/BoothWiseAllocation';
+import MandalWiseAllocation from '../components/MandalWiseAllocation';
+import ManualAllocateModal from '../components/ManualAllocateModal';
 import ReallocateModal from '../components/ReallocateModal';
 import StatCard from '../components/StatCard';
 import Spinner from '../components/Spinner';
@@ -10,6 +12,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import { docDownload } from '../services/download';
 
 const TABS = [
+  { id: 'mandal', label: 'Mandal-wise Allocation' },
   { id: 'allocated', label: 'Allocated Officers' },
   { id: 'unallocated', label: 'Unallocated Officers' },
   { id: 'boothwise', label: 'Booth-wise Allocation' },
@@ -34,11 +37,12 @@ export default function Allocation() {
   const [allocations, setAllocations] = useState([]);
   const [runResult, setRunResult] = useState(null);
 
-  const [tab, setTab] = useState('allocated');
+  const [tab, setTab] = useState('mandal');
   const [historySearch, setHistorySearch] = useState('');
   const [historyStatus, setHistoryStatus] = useState('');
 
   const [confirmRun, setConfirmRun] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling] = useState(false);
   const [reallocTarget, setReallocTarget] = useState(null);
@@ -48,8 +52,6 @@ export default function Allocation() {
     () => allocations.filter((a) => a.status === 'ALLOCATED'),
     [allocations]
   );
-
-  // Officers with no active ALLOCATED allocation (requirement 11: never hide them).
   const unallocatedList = useMemo(() => {
     const allocatedOfficerIds = new Set(
       allocatedList.map((a) => String(a.officer?._id || a.officer))
@@ -80,6 +82,32 @@ export default function Allocation() {
     });
     return map;
   }, [allocatedList]);
+
+  // STEP 1 + STEP 6: group every officer and every booth by Mandal (never mixed).
+  const mandalGroups = useMemo(() => {
+    const keyOf = (v) => String(v || '').trim().toLowerCase();
+    const map = new Map();
+    const seed = (name) => {
+      const k = keyOf(name);
+      if (!map.has(k)) {
+        map.set(k, {
+          key: k,
+          mandalName: String(name || '').trim() || 'Unspecified',
+          officers: [],
+          booths: [],
+          allocated: [],
+        });
+      }
+      return map.get(k);
+    };
+    officers.forEach((o) => seed(o.mandal).officers.push(o));
+    booths.forEach((b) => seed(b.mandal).booths.push(b));
+    allocatedList.forEach((a) => {
+      const name = a.officer?.mandal || a.booth?.mandal || a.mandal;
+      if (name) seed(name).allocated.push(a);
+    });
+    return [...map.values()].sort((a, b) => a.mandalName.localeCompare(b.mandalName));
+  }, [officers, booths, allocatedList]);
 
   const historyList = useMemo(() => {
     const q = historySearch.trim().toLowerCase();
@@ -134,8 +162,6 @@ export default function Allocation() {
   useEffect(() => {
     fetchAll().catch(() => {});
   }, [fetchAll]);
-
-  // POST /api/allocation/run - backend performs the REAL allocation (req. 10).
   const doRun = async () => {
     setRunning(true);
     setConfirmRun(false);
@@ -146,12 +172,13 @@ export default function Allocation() {
       setRunResult(data.data || null);
       setNotify({
         message:
-          `Allocation completed: ${data.data?.allocated ?? 0} allocated, ` +
+          `Allocation completed across ${data.data?.totalMandals ?? 0} Mandal(s): ` +
+          `${data.data?.allocated ?? 0} allocated, ` +
           `${data.data?.unallocated ?? 0} unallocated, ${data.data?.skipped ?? 0} already allocated.`,
         type: 'success',
         duration: 8000,
       });
-      setTab('allocated');
+      setTab('mandal');
       await fetchAll('Refreshing allocation results...');
     } catch (err) {
       setNotify({ message: getErrorMessage(err), type: 'error', duration: 8000 });
@@ -162,8 +189,6 @@ export default function Allocation() {
       setRunLabel('');
     }
   };
-
-  // POST /api/allocation/:id/cancel (requirement 17).
   const doCancel = async () => {
     if (!cancelTarget) return;
     setCancelling(true);
@@ -182,8 +207,6 @@ export default function Allocation() {
       setCancelling(false);
     }
   };
-
-  // POST /api/notifications/send/:allocationId (requirement H).
   const doSendNotification = async (allocation) => {
     setSendingIds((prev) => new Set(prev).add(allocation._id));
     try {
@@ -230,7 +253,15 @@ export default function Allocation() {
             disabled={running}
             onClick={() => setConfirmRun(true)}
           >
-            {running ? 'Running...' : '... Run Automatic Allocation'}
+            {running ? 'Running...' : 'Run Automatic Allocation'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={running || unallocatedList.length === 0}
+            onClick={() => setManualOpen(true)}
+          >
+            Manual Allocate Officer
           </button>
           <button
             type="button"
@@ -238,34 +269,33 @@ export default function Allocation() {
             disabled={running}
             onClick={() => fetchAll('Refreshing allocation data...')}
           >
-            ... Refresh Data
+            Refresh Data
           </button>
           <button
             type="button"
             className="btn btn-ghost"
             onClick={() => docDownload('/api/reports/allocation-excel')}
           >
-            ... Allocated (.xlsx)
+            Allocated (.xlsx)
           </button>
         </div>
       </div>
 
-      {/* Summary cards (requirement 7/14) */}
       <div className="stat-grid">
-        <StatCard label="Total Officers" value={stats?.totalOfficers ?? officers.length} icon="..." tone="navy" />
-        <StatCard label="Total Booths" value={stats?.totalBooths ?? booths.length} icon="..." tone="blue" />
-        <StatCard label="Allocated Officers" value={allocatedList.length} icon="..." tone="green" />
-        <StatCard label="Unallocated Officers" value={unallocatedList.length} icon="..." tone="red" />
-        <StatCard label="Required Officer Slots" value={totalRequiredSlots} icon="..." tone="purple" />
+        <StatCard label="Total Mandals" value={mandalGroups.length} tone="navy" />
+        <StatCard label="Total Officers" value={stats?.totalOfficers ?? officers.length} tone="blue" />
+        <StatCard label="Total Booths" value={stats?.totalBooths ?? booths.length} tone="blue" />
+        <StatCard label="Allocated Officers" value={allocatedList.length} tone="green" />
+        <StatCard label="Unallocated Officers" value={unallocatedList.length} tone="red" />
+        <StatCard label="Required Officer Slots" value={totalRequiredSlots} tone="purple" />
         <StatCard
           label="Available Booth Slots"
           value={Math.max(0, totalRequiredSlots - allocatedList.length)}
-          icon="..."
+         
           tone="amber"
         />
       </div>
 
-      {/* Run result summary (requirement 14) */}
       {runResult ? (
         <div className="card">
           <h3 className="card-title">Allocation Summary</h3>
@@ -274,6 +304,8 @@ export default function Allocation() {
             <div><span className="muted">Successfully Allocated:</span> <strong>{runResult.allocated ?? 0}</strong></div>
             <div><span className="muted">Unallocated:</span> <strong>{runResult.unallocated ?? 0}</strong></div>
             <div><span className="muted">Already Allocated (skipped):</span> <strong>{runResult.skipped ?? 0}</strong></div>
+            <div><span className="muted">Mandals Processed:</span> <strong>{runResult.totalMandals ?? 0}</strong></div>
+            <div><span className="muted">Run Limit:</span> <strong>{runResult.runLimit ?? '∞ (Full Run - All Mandals)'}{runResult.limitReached ? ' - limit reached, run again' : ''}</strong></div>
             <div><span className="muted">Total Booths:</span> <strong>{runResult.totalBooths ?? 0}</strong></div>
             <div><span className="muted">Filled Slots:</span> <strong>{allocatedList.length}</strong></div>
             <div><span className="muted">Available Slots:</span> <strong>{Math.max(0, totalRequiredSlots - allocatedList.length)}</strong></div>
@@ -286,8 +318,6 @@ export default function Allocation() {
         </div>
       ) : null}
 
-
-      {/* Tabs */}
       <div className="tab-row">
         {TABS.map((t) => (
           <button
@@ -297,11 +327,26 @@ export default function Allocation() {
             onClick={() => setTab(t.id)}
           >
             {t.label}
+            {t.id === 'mandal' ? ` (${mandalGroups.length})` : ''}
             {t.id === 'allocated' ? ` (${allocatedList.length})` : ''}
             {t.id === 'unallocated' ? ` (${unallocatedList.length})` : ''}
           </button>
         ))}
       </div>
+
+      {tab === 'mandal' ? (
+        <div className="page-section">
+          <p className="page-subtitle">
+            Every Mandal is shown in its own separate section - officers are never
+            allocated to booths of another Mandal.
+          </p>
+          <MandalWiseAllocation
+            groups={mandalGroups}
+            allocationsByBooth={allocationsByBooth}
+            unallocatedList={unallocatedList}
+          />
+        </div>
+      ) : null}
 
       {tab === 'allocated' ? (
         <div className="card">
@@ -370,7 +415,6 @@ export default function Allocation() {
         <BoothWiseAllocation booths={booths} allocationsByBooth={allocationsByBooth} />
       ) : null}
 
-
       {tab === 'history' ? (
         <div className="card">
           <div className="toolbar">
@@ -430,7 +474,6 @@ export default function Allocation() {
         </div>
       ) : null}
 
-      {/* Run confirmation */}
       <ConfirmModal
         open={confirmRun}
         title="Run Automatic Allocation"
@@ -441,7 +484,6 @@ export default function Allocation() {
         onCancel={() => setConfirmRun(false)}
       />
 
-      {/* Cancel confirmation (requirement 17) */}
       <ConfirmModal
         open={Boolean(cancelTarget)}
         title="Cancel Allocation"
@@ -453,10 +495,16 @@ export default function Allocation() {
         onCancel={() => setCancelTarget(null)}
       />
 
-      {/* Reallocation modal (requirement 16 / G) */}
       <ReallocateModal
         allocation={reallocTarget}
         onClose={() => setReallocTarget(null)}
+        onDone={fetchAll}
+      />
+
+      <ManualAllocateModal
+        open={manualOpen}
+        unallocatedOfficers={unallocatedList}
+        onClose={() => setManualOpen(false)}
         onDone={fetchAll}
       />
     </div>

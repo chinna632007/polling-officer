@@ -23,8 +23,6 @@ function ProtectedRoute({ children }) {
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
-
-  // Close the mobile sidebar whenever the route changes.
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
@@ -36,16 +34,7 @@ export default function App() {
         path="/*"
         element={
           <ProtectedRoute>
-            {/*
-              Admin dashboard layout:
 
-              +-----------------------------------------------------+
-              |  SIDEBAR (left, fixed width)  |  TOP HEADER (Navbar) |
-              |                               +----------------------+
-              |                               |  MAIN CONTENT        |
-              |                               |  (flex: 1)           |
-              +-----------------------------------------------------+
-            */}
             <div className="app-layout">
               <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
               <div className="app-right">

@@ -20,14 +20,9 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  // Already signed in -> go to the role's home dashboard.
   if (user) {
     return <Navigate to={homeForRole(user?.role)} replace />;
   }
-
-  // While we're probing the backend for bootstrap status, show a spinner
-  // (avoids a flash of stale content / premature redirects).
   if (!bootstrapChecked) {
     return (
       <div className="login-page">
@@ -55,9 +50,6 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-emblem" aria-hidden="true">
-          🗳️
-        </div>
         <h1 className="login-title">Smart Polling Booth Officer Allocation</h1>
         <p className="login-subtitle">
           Main Admin Login

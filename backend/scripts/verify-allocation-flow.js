@@ -8,7 +8,7 @@ require('dotenv').config();
 const XLSX = require('xlsx');
 const mongoose = require('mongoose');
 
-const BASE = (process.env.API_BASE || 'http://127.0.0.1:6000').replace(/\/$/, '');
+const BASE = (process.env.API_BASE || 'http://127.0.0.1:5001').replace(/\/$/, '');
 let failures = 0;
 function check(name, ok, detail = '') {
   console.log(`[${ok ? 'PASS' : 'FAIL'}] ${name}${detail ? ` - ${detail}` : ''}`);

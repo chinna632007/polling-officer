@@ -63,16 +63,11 @@ export default function ExcelUploader({ kind = 'officers', onImported }) {
       setTotalRows(0);
       setMode('preview');
       setNotify({ message: 'File selected – validating…', type: 'info' });
-
-      // Step 1: validate + preview only
       const form = new FormData();
       form.append('file', selected[0]);
       setLoading(true);
       api
         .post(`${apiUrl}?mode=preview`, form, {
-          // Explicit multipart header: Axios 1.x strips it in the browser and
-          // lets the browser set the correct boundary. This prevents FormData
-          // being serialized as JSON (which made multer report "no file").
           headers: { 'Content-Type': 'multipart/form-data' },
         })
         .then(({ data }) => {
@@ -82,7 +77,6 @@ export default function ExcelUploader({ kind = 'officers', onImported }) {
           setNotify({ message: data.message || 'Validation successful', type: 'success' });
         })
         .catch((error) => {
-          // Surface the server's detailed validation info when available.
           const body = error?.response?.data;
           let msg = getErrorMessage(error);
           if (body?.missingColumns?.length) {
@@ -110,8 +104,6 @@ export default function ExcelUploader({ kind = 'officers', onImported }) {
     },
     [handleFile]
   );
-
-  // Step 2: commit import
   const importRows = async () => {
     if (!file) return;
     const form = new FormData();
@@ -131,9 +123,6 @@ export default function ExcelUploader({ kind = 'officers', onImported }) {
       setLoading(false);
     }
   };
-
-  // Templates are JWT-protected, so a plain <a href> would get a 401.
-  // Download through the authenticated axios instance instead.
   const downloadTemplate = async () => {
     try {
       const response = await api.get(`/api/upload/templates/${kind}`, {
@@ -191,7 +180,7 @@ export default function ExcelUploader({ kind = 'officers', onImported }) {
           onChange={(e) => handleFile(e.target.files)}
         />
         <span className="dropzone-icon" aria-hidden="true">
-          📂
+          
         </span>
         <p className="dropzone-text">
           <strong>Drag &amp; drop</strong> your Excel file here, or click to browse

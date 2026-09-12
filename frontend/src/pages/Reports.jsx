@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { docDownload } from '../services/download';
 
 /**
@@ -8,35 +9,54 @@ const REPORTS = [
     title: 'Officer List',
     desc: 'Complete officer master data (Excel)',
     url: '/api/reports/officers-excel',
-    icon: '👤',
   },
   {
     title: 'Booth List',
     desc: 'All polling booths with capacity status (Excel)',
     url: '/api/reports/booths-excel',
-    icon: '🏛️',
   },
   {
     title: 'Allocated Officers',
     desc: 'Officers assigned to booths with compatibility scores (Excel)',
     url: '/api/reports/allocation-excel',
-    icon: '✅',
   },
-  {
+    {
     title: 'Unallocated Officers',
     desc: 'Officers who could not be allocated (Excel)',
     url: '/api/reports/unallocated-officers',
-    icon: '⚠️',
+  },
+  {
+    title: 'Allocation by Mandal',
+    desc: 'One sheet per Mandal - allocated officers never mixed across Mandals (Excel)',
+    url: '/api/reports/allocation-by-mandal',
+  },
+    {
+    mandalInput: true,
+    title: 'Allocated Officers for a Mandal',
+    desc: 'Download the allocated-officers list for one Mandal. Case-insensitive (Jami / jami / " JAMI " all match).',
   },
   {
     title: 'Notification Status Report',
     desc: 'SMS delivery status for all messages (Excel)',
     url: '/api/reports/notifications-excel',
-    icon: '✉️',
   },
 ];
 
 export default function Reports() {
+  const [mandalInput, setMandalInput] = useState('');
+  const [downloading, setDownloading] = useState(false);
+
+  const downloadForMandal = async () => {
+    const name = mandalInput.trim();
+    if (!name) return;
+    setDownloading(true);
+    try {
+      await docDownload(`/api/reports/allocated-officers/${encodeURIComponent(name)}`);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="page">
       <div className="page-head">
@@ -49,18 +69,36 @@ export default function Reports() {
       <div className="report-grid">
         {REPORTS.map((report) => (
           <div key={report.title} className="card report-card">
-            <div className="report-icon" aria-hidden="true">
-              {report.icon}
-            </div>
             <h3 className="card-title">{report.title}</h3>
             <p className="report-desc">{report.desc}</p>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => docDownload(report.url)}
-            >
-              Download .xlsx
-            </button>
+            {report.mandalInput ? (
+              <div className="mandal-download-row">
+                <input
+                  type="text"
+                                    className="input"
+                  value={mandalInput}
+                  placeholder="e.g. Jami"
+                  onChange={(e) => setMandalInput(e.target.value)}
+                  disabled={downloading}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={downloadForMandal}
+                  disabled={downloading || !mandalInput.trim()}
+                >
+                  {downloading ? 'Downloading…' : 'Download .xlsx'}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => docDownload(report.url)}
+              >
+                Download .xlsx
+              </button>
+            )}
           </div>
         ))}
       </div>

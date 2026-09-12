@@ -13,7 +13,7 @@ export default function Navbar({ onMenuClick }) {
         onClick={onMenuClick}
         aria-label="Open navigation menu"
       >
-        ☰
+        Menu
       </button>
 
       <div className="navbar-brand">

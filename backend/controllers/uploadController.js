@@ -9,7 +9,6 @@ const countService = require('../services/countService');
 
 const MAX_PREVIEW_ROWS = 50;
 
-/** Reads the uploaded excel buffer into an array of row objects. */
 function readExcelRows(buffer) {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const firstSheetName = workbook.SheetNames[0];
@@ -18,10 +17,6 @@ function readExcelRows(buffer) {
   return XLSX.utils.sheet_to_json(sheet, { defval: '' });
 }
 
-/**
- * Creates an UploadBatch record so the admin can see every uploaded file
- * in the history list and later delete the whole batch (and its data).
- */
 async function recordBatch({ file, kind, saveResult, admin }) {
   try {
     await UploadBatch.create({
@@ -37,17 +32,10 @@ async function recordBatch({ file, kind, saveResult, admin }) {
       uploadedByUsername: admin?.username || '',
     });
   } catch (error) {
-    // Recording the batch is best-effort - never fail an import over it.
     console.warn('[upload] Could not record upload batch:', error.message);
   }
 }
 
-/**
- * POST /api/upload/officers
- * Body: multipart file field "file"
- * Query: mode=preview (validate only) | mode=commit (validate + save)
- * Returns the validated entity list for preview and import counts.
- */
 async function uploadOfficers(req, res, next) {
   try {
     if (!req.file) {
@@ -98,9 +86,6 @@ async function uploadOfficers(req, res, next) {
   }
 }
 
-/**
- * POST /api/upload/booths - same preview/commit contract as officers.
- */
 async function uploadBooths(req, res, next) {
   try {
     if (!req.file) {
@@ -151,7 +136,6 @@ async function uploadBooths(req, res, next) {
   }
 }
 
-/** GET /api/upload/templates/:kind - downloads an .xlsx sample template. */
 function downloadTemplate(req, res) {
   const kind = req.params.kind === 'booths' ? 'booths' : 'officers';
   const buffer = excelService.buildTemplate(kind);
@@ -167,7 +151,6 @@ function downloadTemplate(req, res) {
   return res.send(buffer);
 }
 
-/** GET /api/upload/history - lists every committed Excel upload (newest first). */
 async function getUploadHistory(req, res, next) {
   try {
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 100));
@@ -194,14 +177,6 @@ async function getUploadHistory(req, res, next) {
   }
 }
 
-/**
- * DELETE /api/upload/:id
- * Deletes an uploaded file record AND completely removes its imported data
- * from MongoDB: the officers/booths, their allocations and related SMS
- * notifications are all cascaded away. Booth allocation counters on booths
- * that survive (officer batch deleted) are corrected so no stale numbers
- * remain.
- */
 async function deleteUploadBatch(req, res, next) {
   try {
     const batch = await UploadBatch.findById(req.params.id);
@@ -215,14 +190,10 @@ async function deleteUploadBatch(req, res, next) {
 
     if (recordIds.length > 0) {
       if (batch.kind === 'officers') {
-        // 1. Allocations for these officers.
         const allocs = await Allocation.find({ officer: { $in: recordIds } }).lean();
         if (allocs.length > 0) {
           const delA = await Allocation.deleteMany({ officer: { $in: recordIds } });
           removed.allocations = delA.deletedCount || 0;
-
-          // 2. Recalculate counters on surviving booths from the real
-          // ALLOCATED allocation documents (never raw $inc of stale counts).
           const affected = new Set();
           for (const a of allocs) {
             const boothId = a.booth ? String(a.booth) : '';
@@ -234,14 +205,11 @@ async function deleteUploadBatch(req, res, next) {
             await countService.recalculateBoothCounts(boothId);
           }
         }
-
-        // 3. Notifications + the officers themselves.
         const delN = await Notification.deleteMany({ officer: { $in: recordIds } });
         removed.notifications = delN.deletedCount || 0;
         const delO = await Officer.deleteMany({ _id: { $in: recordIds } });
         removed.officers = delO.deletedCount || 0;
       } else {
-        // Booth batch: drop allocations pointing at these booths, then the booths.
         const delA = await Allocation.deleteMany({ booth: { $in: recordIds } });
         removed.allocations = delA.deletedCount || 0;
         const delB = await Booth.deleteMany({ _id: { $in: recordIds } });
@@ -264,12 +232,6 @@ async function deleteUploadBatch(req, res, next) {
   }
 }
 
-/**
- * DELETE /api/upload/all
- * Wipes EVERY uploaded file record and ALL imported data from MongoDB:
- * all upload batches, officers, booths, allocations and notifications.
- * Used by the "Delete All Files" button in the upload history list.
- */
 async function deleteAllUploads(req, res, next) {
   try {
     const [batchCount, officerCount, boothCount, allocCount, notifCount] =
@@ -280,8 +242,6 @@ async function deleteAllUploads(req, res, next) {
         Allocation.countDocuments(),
         Notification.countDocuments(),
       ]);
-
-    // Full wipe - "delete total data" of the uploaded files domain.
     await Promise.all([
       UploadBatch.deleteMany({}),
       Allocation.deleteMany({}),
