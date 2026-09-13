@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import api from '../services/api';
 import { docDownload } from '../services/download';
 
 /**
@@ -33,7 +34,7 @@ const REPORTS = [
     {
     mandalInput: true,
     title: 'Allocated Officers for a Mandal',
-    desc: 'Download the allocated-officers list for one Mandal. Case-insensitive (Jami / jami / " JAMI " all match).',
+    desc: 'Pick a Mandal from the list (built from officers + booths) to download its allocated officers (Excel)',
   },
   {
     title: 'Notification Status Report',
@@ -44,14 +45,41 @@ const REPORTS = [
 
 export default function Reports() {
   const [mandalInput, setMandalInput] = useState('');
+  const [mandals, setMandals] = useState([]);
+  const [loadingMandals, setLoadingMandals] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
-  const downloadForMandal = async () => {
-    const name = mandalInput.trim();
-    if (!name) return;
+  /** Unique Mandal names present in the officers AND booths masters. */
+  const loadMandals = useCallback(async () => {
+    setLoadingMandals(true);
+    try {
+      const [officersRes, boothsRes] = await Promise.all([
+        api.get('/api/officers/grouped'),
+        api.get('/api/booths/grouped'),
+      ]);
+      const names = new Set();
+      (officersRes.data?.data || []).forEach((g) => {
+        if (g.mandal) names.add(g.mandal);
+      });
+      (boothsRes.data?.data || []).forEach((g) => {
+        if (g.mandal) names.add(g.mandal);
+      });
+      setMandals([...names].sort((a, b) => a.localeCompare(b)));
+    } finally {
+      setLoadingMandals(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMandals().catch(() => {});
+  }, [loadMandals]);
+
+  const downloadForMandal = async (name) => {
+    const target = String(name || mandalInput || '').trim();
+    if (!target) return;
     setDownloading(true);
     try {
-      await docDownload(`/api/reports/allocated-officers/${encodeURIComponent(name)}`);
+      await docDownload(`/api/reports/allocated-officers/${encodeURIComponent(target)}`);
     } finally {
       setDownloading(false);
     }
@@ -73,18 +101,28 @@ export default function Reports() {
             <p className="report-desc">{report.desc}</p>
             {report.mandalInput ? (
               <div className="mandal-download-row">
-                <input
-                  type="text"
-                                    className="input"
+                <select
+                  className="input"
                   value={mandalInput}
-                  placeholder="e.g. Jami"
-                  onChange={(e) => setMandalInput(e.target.value)}
-                  disabled={downloading}
-                />
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    setMandalInput(name);
+                    // Selecting a Mandal downloads that Mandal's data immediately.
+                    if (name) downloadForMandal(name);
+                  }}
+                  disabled={downloading || loadingMandals}
+                >
+                  <option value="">
+                    {loadingMandals ? 'Loading Mandals…' : 'Select Mandal…'}
+                  </option>
+                  {mandals.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
-                  onClick={downloadForMandal}
+                  onClick={() => downloadForMandal()}
                   disabled={downloading || !mandalInput.trim()}
                 >
                   {downloading ? 'Downloading…' : 'Download .xlsx'}
