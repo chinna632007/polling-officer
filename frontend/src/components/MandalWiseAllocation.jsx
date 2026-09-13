@@ -46,6 +46,42 @@ export default function MandalWiseAllocation({
               { label: 'Available Slots', value: availableSlots },
             ]}
           >
+            {g.allocated.length > 0 ? (
+              <>
+                <div className="booth-meta muted">
+                  <strong>{g.mandalName} Mandal - Allocated Officers: {g.allocated.length}</strong>
+                </div>
+                <div className="table-wrap">
+                  <table className="table table-sm">
+                    <thead>
+                      <tr>
+                        <th>S.No</th>
+                        <th>Officer ID</th>
+                        <th>Officer Name</th>
+                        <th>Designation</th>
+                        <th>Booth No.</th>
+                        <th>Booth Name</th>
+                        <th>Booth Locality</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {g.allocated.map((a, i) => (
+                        <tr key={a._id}>
+                          <td className="mono">{i + 1}</td>
+                          <td className="mono">{a.officer?.officerId || '—'}</td>
+                          <td>{a.officer?.officerName || '—'}</td>
+                          <td>{a.officer?.designation || '—'}</td>
+                          <td className="mono">{a.booth?.boothNumber || '—'}</td>
+                          <td>{a.booth?.boothName || '—'}</td>
+                          <td>{a.booth?.locality || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : null}
+
             {g.booths.length === 0 ? (
               <div className="boothwise-grid">
                 <section className="card booth-card">

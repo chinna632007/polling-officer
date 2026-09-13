@@ -725,16 +725,18 @@ a { color: var(--primary); text-decoration: none; }
    REPORTS
    ========================================================================== */
 
-.report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
-.report-card { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; }
+.report-card { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .mandal-download-row {
   display: flex;
+  flex-wrap: nowrap;
   gap: 8px;
   align-items: center;
   width: 100%;
+  min-width: 0;
 }
-.mandal-download-row .input { flex: 1 1 160px; }
-.mandal-download-row .btn { flex-shrink: 0; }
+.mandal-download-row .input { flex: 1 1 auto; min-width: 0; }
+.mandal-download-row .btn { flex-shrink: 0; white-space: nowrap; }
 .report-icon { font-size: 28px; }
 .report-desc { font-size: 13px; color: var(--text-muted); flex: 1; }
 

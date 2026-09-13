@@ -78,9 +78,9 @@ router.get('/notifications-excel', async (req, res, next) => {
 });
 
 // GET /api/reports/allocation-by-mandal
-// A single workbook with ONE sheet per Mandal (each sheet = allocated officers
-// of that Mandal, sorted by Officer ID ascending). Officers are never mixed
-// across Mandals.
+// Allocation details for ALL Mandals in a SINGLE sheet. Each row keeps its own
+// Officer Mandal / Booth Mandal columns; the sheet is sorted by Officer ID
+// ascending so officers stay easy to find in one place.
 router.get('/allocation-by-mandal', async (req, res, next) => {
   try {
     const scope = roleService.scopeFilter(req.user) || {};

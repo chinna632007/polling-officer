@@ -17,6 +17,7 @@
  */
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { compareOfficerIds } = require('../services/sortUtil');
 
 const BASE = process.env.API_BASE || 'http://localhost:5001';
 
@@ -266,7 +267,7 @@ async function cleanTestData() {
     if (bytes.byteLength < 1000) throw new Error('report file too small');
   });
 
-  await test('allocation-by-mandal returns one sheet per Mandal', async () => {
+  await test('allocation-by-mandal returns a SINGLE sheet sorted by Officer ID ascending', async () => {
     const response = await fetch(`${BASE}/api/reports/allocation-by-mandal`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -275,6 +276,17 @@ async function cleanTestData() {
     if (!contentType.includes('spreadsheet')) throw new Error(`bad content-type: ${contentType}`);
     const bytes = await response.arrayBuffer();
     if (bytes.byteLength < 1000) throw new Error('report file too small');
+    const X = require('xlsx');
+    const wb = X.read(Buffer.from(bytes));
+    if (wb.SheetNames.length !== 1) {
+      throw new Error(`expected exactly 1 sheet, got ${wb.SheetNames.length}`);
+    }
+    const rows = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    if (!rows.length) throw new Error('expected at least one allocated officer row');
+    // Allocation details are sorted by Officer ID ascending across ALL Mandals.
+    const ids = rows.map((r) => String(r['Officer ID'] || ''));
+    const sorted = [...ids].sort(compareOfficerIds);
+    if (JSON.stringify(ids) !== JSON.stringify(sorted)) throw new Error('rows not sorted by Officer ID');
   });
 
   await test('allocated-officers/:mandal returns this Mandal only', async () => {
@@ -291,7 +303,7 @@ async function cleanTestData() {
     if (!rows.length) throw new Error('expected at least one allocated officer row');
     // Officers are sorted by Officer ID ascending.
     const ids = rows.map((r) => String(r['Officer ID'] || ''));
-    const sorted = [...ids].sort((a, b) => a.localeCompare(b));
+    const sorted = [...ids].sort(compareOfficerIds);
     if (JSON.stringify(ids) !== JSON.stringify(sorted)) throw new Error('rows not sorted by Officer ID');
   });
 

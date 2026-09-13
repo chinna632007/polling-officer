@@ -27,7 +27,7 @@ const REPORTS = [
   },
   {
     title: 'Allocation by Mandal',
-    desc: 'One sheet per Mandal - allocated officers never mixed across Mandals (Excel)',
+    desc: 'All Mandals in ONE sheet - each row shows its Mandal, sorted by Officer ID ascending (Excel)',
     url: '/api/reports/allocation-by-mandal',
   },
     {

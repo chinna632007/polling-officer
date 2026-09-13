@@ -80,6 +80,42 @@ function boothCapacity(booth) {
   return { min, max };
 }
 
+/**
+ * STRICT BOOTH CAPACITY GUARD (backend hard rule).
+ * --------------------------------------------------
+ * Before ANY allocation is created - bulk, manual or reallocation - the booth
+ * must still have a free position. The source of truth is the ACTIVE
+ * (`ALLOCATED`) allocation documents, NEVER the possibly-stale stored booth
+ * counter:
+ *
+ *   1. find the booth
+ *   2. required = booth.requiredOfficers
+ *   3. live = count of ACTIVE/ALLOCATED allocations for the booth
+ *   4. if live >= required  -> reject/skip (booth is FULL)
+ *   5. only then may a new allocation be created
+ *
+ * Cancelled / reallocated allocations are NOT counted, so cancelling an
+ * officer frees the slot immediately.
+ */
+async function assertBoothHasCapacity(boothId, label = 'Booth') {
+  const booth = await Booth.findById(boothId).lean();
+  if (!booth) {
+    const error = new Error(`${label} not found`);
+    error.statusCode = 404;
+    throw error;
+  }
+  const cap = boothCapacity(booth);
+  const live = await countService.getLiveAllocatedCount(booth._id);
+  if (live >= cap.max) {
+    const error = new Error(
+      `${label} has no available capacity (${live}/${cap.max} already allocated - maximum is ${cap.max})`
+    );
+    error.statusCode = 409;
+    throw error;
+  }
+  return { booth, live, cap };
+}
+
 function scoreSuitability(officer, booth, capacity) {
   const check = isRelated(officer, booth);
   if (check.related) return { suitable: false, score: -Infinity, check };
@@ -392,6 +428,20 @@ async function runAllocation(options = {}) {
           continue;
         }
 
+        // STRICT CAPACITY RULE (in-run): re-verify the picked booth still has a
+        // free position from the live counts before creating the allocation.
+        // `liveCounts` is updated after every allocation, so once a booth is
+        // full the very next officer is redirected (or skipped with a reason).
+        if (best.live >= best.cap.max) {
+          pushUnallocatedRow(
+            officer,
+            pickUnallocatedReason(officer, mandalBooths, liveCounts, {}),
+            mandalEntry,
+            displayMandal
+          );
+          continue;
+        }
+
         const allocation = await Allocation.create({
           allocationId: await nextAllocationId(officer),
           officer: officer._id,
@@ -564,6 +614,12 @@ async function reallocateOfficer(allocationId, preferredBoothId = null) {
       throw error;
     }
 
+    // STRICT CAPACITY RULE: the destination booth must still have a free slot.
+    // Re-verified from ACTIVE allocation documents right before the insert so a
+    // reallocation can never push a booth past requiredOfficers.
+    await countService.recalculateBoothCounts(chosen._id);
+    await assertBoothHasCapacity(chosen._id, 'Booth');
+
     const newAllocation = await Allocation.create({
       allocationId: await nextAllocationId(officer),
       officer: officer._id,
@@ -671,6 +727,10 @@ async function manualAllocate(officerRef, boothRef) {
   return runInTransaction(async () => {
     const stillDup = await Allocation.findOne({ officer: officer._id, status: STATUS.ALLOCATED });
     if (stillDup) { const e = new Error('Officer already has an active allocation'); e.statusCode = 409; throw e; }
+    // Hard backend capacity rule: re-verify from ACTIVE allocation documents
+    // right before insert so the booth can never exceed requiredOfficers.
+    await countService.recalculateBoothCounts(booth._id);
+    await assertBoothHasCapacity(booth._id, 'Booth');
     const allocation = await Allocation.create({
       allocationId: await nextAllocationId(officer),
       officer: officer._id,

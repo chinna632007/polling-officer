@@ -1,6 +1,7 @@
 const Booth = require('../models/Booth');
 const Allocation = require('../models/Allocation');
 const uploadBatchService = require('../services/uploadBatchService');
+const countService = require('../services/countService');
 const { scopeFilter } = require('../services/roleService');
 
 /** Escapes a user-provided value so it is safe inside a RegExp. */
@@ -49,10 +50,21 @@ async function getBooths(req, res, next) {
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const filter = buildBoothFilter(req);
 
-    const [booths, total] = await Promise.all([
+    const [booths, total, liveMap] = await Promise.all([
       Booth.find(filter).sort({ boothId: 1 }).skip((page - 1) * limit).limit(limit).lean(),
       Booth.countDocuments(filter),
+      countService.computeBoothCountsMap(),
     ]);
+
+    // Live counts are the authority: allocatedOfficerCount / availableSlots are
+    // recomputed from the ACTIVE (ALLOCATED) allocation documents so the UI can
+    // never show a stale manually-stored counter (e.g. 4/3).
+    booths.forEach((b) => {
+      const required = Math.max(0, Number(b.requiredOfficers) || 0);
+      const live = Math.min(liveMap.get(String(b._id)) || 0, required);
+      b.allocatedOfficerCount = live;
+      b.availableSlots = Math.max(0, required - live);
+    });
 
     return res.json({
       success: true,
@@ -77,14 +89,44 @@ async function createBooth(req, res, next) {
 /** PUT /api/booths/:id - update an existing booth. */
 async function updateBooth(req, res, next) {
   try {
-    const booth = await Booth.findByIdAndUpdate(req.params.id, req.body, {
+    const existing = await Booth.findById(req.params.id).lean();
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Booth not found' });
+    }
+
+    // Capacity counters are computed from ACTIVE allocation documents - never
+    // accept them from a client payload.
+    const { allocatedOfficerCount, availableSlots, ...allowed } = req.body || {};
+
+    // STRICT CAPACITY RULE: never let Required Officers drop below the number
+    // of officers that are currently ACTIVE on this booth - otherwise the data
+    // would silently exceed capacity (e.g. live 3, set required to 2 -> 3/2).
+    let newRequired = existing.requiredOfficers;
+    if (allowed.requiredOfficers !== undefined) {
+      newRequired = Number(allowed.requiredOfficers);
+    }
+    const live = await countService.getLiveAllocatedCount(existing._id);
+    if (Number.isInteger(newRequired) && newRequired >= 0 && live > newRequired) {
+      const error = new Error(
+        `Cannot set Required Officers to ${newRequired}: booth already has ${live} active allocation(s)`
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const booth = await Booth.findByIdAndUpdate(req.params.id, allowed, {
       new: true,
       runValidators: true,
     });
     if (!booth) {
       return res.status(404).json({ success: false, message: 'Booth not found' });
     }
-    return res.json({ success: true, data: booth });
+
+    // Re-derive the counters from the real ALLOCATED documents so the stored
+    // values always match reality after the update.
+    await countService.recalculateBoothCounts(booth._id);
+    const fresh = await Booth.findById(booth._id).lean();
+    return res.json({ success: true, data: fresh });
   } catch (error) {
     next(error);
   }
@@ -123,7 +165,18 @@ async function deleteBooth(req, res, next) {
 async function getBoothsGrouped(req, res, next) {
   try {
     const filter = buildBoothFilter(req);
-    const booths = await Booth.find(filter).sort({ mandal: 1, boothId: 1 }).lean();
+    const [booths, liveMap] = await Promise.all([
+      Booth.find(filter).sort({ mandal: 1, boothId: 1 }).lean(),
+      countService.computeBoothCountsMap(),
+    ]);
+
+    // Live counts come from ACTIVE allocation documents - never stale counters.
+    booths.forEach((b) => {
+      const required = Math.max(0, Number(b.requiredOfficers) || 0);
+      const live = Math.min(liveMap.get(String(b._id)) || 0, required);
+      b.allocatedOfficerCount = live;
+      b.availableSlots = Math.max(0, required - live);
+    });
 
     const groups = new Map();
     for (const booth of booths) {

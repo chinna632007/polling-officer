@@ -10,6 +10,7 @@ import Spinner from '../components/Spinner';
 import Toast from '../components/Toast';
 import ConfirmModal from '../components/ConfirmModal';
 import { docDownload } from '../services/download';
+import { compareOfficerIds, compareAllocationsByOfficerId } from '../utils/naturalSort';
 
 const TABS = [
   { id: 'mandal', label: 'Mandal-wise Allocation' },
@@ -49,7 +50,9 @@ export default function Allocation() {
   const [sendingIds, setSendingIds] = useState(new Set());
 
   const allocatedList = useMemo(
-    () => allocations.filter((a) => a.status === 'ALLOCATED'),
+    () => allocations
+      .filter((a) => a.status === 'ALLOCATED')
+      .sort(compareAllocationsByOfficerId),
     [allocations]
   );
   const unallocatedList = useMemo(() => {
@@ -70,7 +73,8 @@ export default function Allocation() {
           reasonById.get(String(o.officerId)) ||
           reasonById.get(String(o._id)) ||
           'No suitable booth available in the same Mandal.',
-      }));
+      }))
+      .sort((a, b) => compareOfficerIds(a.officerId, b.officerId));
   }, [officers, allocatedList, runResult]);
 
   const allocationsByBooth = useMemo(() => {
@@ -80,6 +84,8 @@ export default function Allocation() {
       if (!map[key]) map[key] = [];
       map[key].push(a);
     });
+    // Inside EVERY booth the officers are sorted by numeric Officer ID ascending.
+    Object.values(map).forEach((list) => list.sort(compareAllocationsByOfficerId));
     return map;
   }, [allocatedList]);
 
@@ -106,6 +112,9 @@ export default function Allocation() {
       const name = a.officer?.mandal || a.booth?.mandal || a.mandal;
       if (name) seed(name).allocated.push(a);
     });
+    // Inside EVERY Mandal the officers are sorted by numeric Officer ID ascending,
+    // while Mandal sections themselves are sorted by name ascending.
+    [...map.values()].forEach((g) => g.allocated.sort(compareAllocationsByOfficerId));
     return [...map.values()].sort((a, b) => a.mandalName.localeCompare(b.mandalName));
   }, [officers, booths, allocatedList]);
 
@@ -127,7 +136,8 @@ export default function Allocation() {
         .join(' ')
         .toLowerCase();
       return hay.includes(q);
-    });
+    })
+    .sort(compareAllocationsByOfficerId);
   }, [allocations, historySearch, historyStatus]);
 
   const totalRequiredSlots = useMemo(

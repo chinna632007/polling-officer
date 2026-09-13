@@ -3,6 +3,8 @@ const XLSX = require('xlsx');
 const Officer = require('../models/Officer');
 const Booth = require('../models/Booth');
 const Notification = require('../models/Notification');
+const countService = require('./countService');
+const { compareOfficerIds } = require('./sortUtil');
 
 const OFFICER_COLUMNS = [
   'Officer ID',
@@ -436,21 +438,28 @@ async function officerReport(filter = {}) {
 
 async function boothReport(filter = {}) {
   const booths = await Booth.find(filter).sort({ boothId: 1 }).lean();
-  const rows = booths.map((b) => ({
-    'Booth ID': b.boothId,
-    'Booth Number': b.boothNumber,
-    'Booth Name': b.boothName,
-    'Building Name': b.buildingName,
-    Street: b.street,
-    'Village/Locality': b.locality,
-    Ward: b.ward,
-    Mandal: b.mandal,
-    District: b.district,
-    'PIN Code': b.pinCode,
-    'Required Officers': b.requiredOfficers,
-    'Allocated Officers': b.allocatedOfficerCount,
-    'Vacant Slots': Math.max(0, b.requiredOfficers - b.allocatedOfficerCount),
-  }));
+  // Live allocated counts (source of truth = ACTIVE allocation documents) so
+  // the report never trusts a stale stored booth counter.
+  const liveMap = await countService.computeBoothCountsMap();
+  const rows = booths.map((b) => {
+    const required = Math.max(0, Number(b.requiredOfficers) || 0);
+    const allocated = Math.min(liveMap.get(String(b._id)) || 0, required);
+    return {
+      'Booth ID': b.boothId,
+      'Booth Number': b.boothNumber,
+      'Booth Name': b.boothName,
+      'Building Name': b.buildingName,
+      Street: b.street,
+      'Village/Locality': b.locality,
+      Ward: b.ward,
+      Mandal: b.mandal,
+      District: b.district,
+      'PIN Code': b.pinCode,
+      'Required Officers': required,
+      'Allocated Officers': allocated,
+      'Vacant Slots': Math.max(0, required - allocated),
+    };
+  });
   return toXlsxBuffer(rows, 'Booths');
 }
 
@@ -495,15 +504,16 @@ async function allocationReport(filter = {}) {
     ...filter,
   });
   const rows = allocations
-    .sort((x, y) => String(x.officer?.officerId || '').localeCompare(String(y.officer?.officerId || '')))
+    .sort((x, y) => compareOfficerIds(x.officer?.officerId, y.officer?.officerId))
     .map(rowForAllocation);
   return toXlsxBuffer(rows, 'Allocations');
 }
 
 /**
- * Mandal-wise allocation report: a single workbook with one sheet per Mandal.
- * Each sheet lists the ALLOCATED officers of that Mandal, sorted by Officer ID
- * ascending. Officers are NEVER mixed across Mandals.
+ * Allocation details for ALL Mandals in a SINGLE Excel sheet.
+ * Every row carries its own 'Officer Mandal' / 'Booth Mandal' columns so the
+ * Mandal is never lost, and the whole sheet is sorted by Officer ID ascending
+ * so the officer list is easy to scan in one place.
  */
 async function allocationReportByMandal(filter = {}) {
   const allocations = await getAllocationRowsForReport({
@@ -511,21 +521,10 @@ async function allocationReportByMandal(filter = {}) {
     booth: { $ne: null },
     ...filter,
   });
-  const sheets = new Map();
-  allocations.forEach((a) => {
-    const mandal = (a.officer?.mandal || a.mandal || 'Unknown').trim();
-    if (!sheets.has(mandal)) sheets.set(mandal, []);
-    sheets.get(mandal).push(a);
-  });
-  const workbookSheets = [];
-  let idx = 0;
-  for (const [mandal, rows] of sheets) {
-    const sorted = rows
-      .sort((x, y) => String(x.officer?.officerId || '').localeCompare(String(y.officer?.officerId || '')))
-      .map(rowForAllocation);
-    workbookSheets.push({ sheetName: `Mandal_${++idx}`, rows: sorted });
-  }
-  return toWorkbookBuffer(workbookSheets);
+  const rows = allocations
+    .sort((x, y) => compareOfficerIds(x.officer?.officerId, y.officer?.officerId))
+    .map(rowForAllocation);
+  return toXlsxBuffer(rows, 'All Allocations');
 }
 
 /**
@@ -545,7 +544,7 @@ async function allocatedOfficersReportForMandal(filter = {}, mandalName = '') {
     return m === target;
   });
   const rows = matched
-    .sort((x, y) => String(x.officer?.officerId || '').localeCompare(String(y.officer?.officerId || '')))
+    .sort((x, y) => compareOfficerIds(x.officer?.officerId, y.officer?.officerId))
     .map(rowForAllocation);
   return toXlsxBuffer(rows, `Allocated_${String(mandalName || 'mandal').replace(/[^a-z0-9]/gi, '_').slice(0, 20) || 'mandal'}`);
 }
