@@ -54,6 +54,21 @@ async function getNotifications(req, res, next) {
     const notifScope = await notificationScopeFilter(req.user);
     Object.assign(filter, notifScope);
 
+    // Optional exact-Mandal filter (?mandal=NAME): matches the notification's
+    // Mandal snapshot OR the linked officer's current Mandal (safe fallback
+    // for older records). Combined with the role scope above via $and.
+    const mandal = String(req.query.mandal || '').trim();
+    if (mandal) {
+      const re = new RegExp(`^${mandal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      const Officer = require('../models/Officer');
+      const officers = await Officer.find({ mandal: re }).select('_id').lean();
+      const mandalOr = [{ mandal: re }];
+      if (officers.length) mandalOr.push({ officer: { $in: officers.map((o) => o._id) } });
+      const base = { ...filter };
+      Object.keys(base).forEach((k) => delete filter[k]);
+      Object.assign(filter, { $and: [base, { $or: mandalOr }] });
+    }
+
     const query = Notification.find(filter).populate('officer').populate('booth').populate({ path: 'allocation', populate: { path: 'booth' } }).sort({ createdAt: -1 });
 
     const [data, total] = await Promise.all([

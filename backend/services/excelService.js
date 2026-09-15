@@ -582,6 +582,7 @@ async function notificationReport(filter = {}) {
     'Officer ID': n.officer?.officerId || '',
     'Officer Name': n.officer?.officerName || '',
     'Mobile Number': n.mobileNumber,
+    Mandal: n.mandal || n.officer?.mandal || '',
     Status: n.status,
     Provider: n.provider,
     'Provider Message ID': n.providerMessageId || '',

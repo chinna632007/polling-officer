@@ -67,11 +67,29 @@ router.get('/unallocated-officers', async (req, res, next) => {
   }
 });
 
-// GET /api/reports/notifications-excel
+// GET /api/reports/notifications-excel?mandal=NAME
+// Notification status report - the whole history, or filtered down to a single
+// Mandal when the optional ?mandal query parameter is supplied.
 router.get('/notifications-excel', async (req, res, next) => {
   try {
     const notifScope = await roleService.notificationScopeFilter(req.user);
-    sendWorkbook(res, await excelService.notificationReport(notifScope), 'notification-status.xlsx');
+    const mandal = String(req.query.mandal || '').trim();
+    let filter = notifScope;
+    if (mandal) {
+      const re = new RegExp(`^${mandal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      const Officer = require('../models/Officer');
+      // Notifications carry a Mandal snapshot, but also match by the officer's
+      // current Mandal as a safe fallback for older records.
+      const officers = await Officer.find({ mandal: re }).select('_id').lean();
+      filter = {
+        ...notifScope,
+        $or: [
+          { mandal: re },
+          ...(officers.length ? [{ officer: { $in: officers.map((o) => o._id) } }] : []),
+        ],
+      };
+    }
+    sendWorkbook(res, await excelService.notificationReport(filter), 'notification-status.xlsx');
   } catch (error) {
     next(error);
   }

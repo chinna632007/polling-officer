@@ -32,22 +32,32 @@ const REPORTS = [
     url: '/api/reports/allocation-by-mandal',
   },
     {
-    mandalInput: true,
+    id: 'allocated-mandal',
+    mandalSelect: true,
+    requireMandal: true,
     title: 'Allocated Officers for a Mandal',
-    desc: 'Pick a Mandal from the list (built from officers + booths) to download its allocated officers (Excel)',
+    desc: 'Select a Mandal, then press Download to get its allocated officers (Excel)',
+    buildUrl: (m) =>
+      m ? `/api/reports/allocated-officers/${encodeURIComponent(m)}` : null,
   },
   {
+    id: 'notification-mandal',
+    mandalSelect: true,
+    requireMandal: false,
     title: 'Notification Status Report',
-    desc: 'SMS delivery status for all messages (Excel)',
-    url: '/api/reports/notifications-excel',
+    desc: 'Select a Mandal and press Download for that Mandal, or "All Mandals" for everything (Excel)',
+    buildUrl: (m) =>
+      m
+        ? `/api/reports/notifications-excel?mandal=${encodeURIComponent(m)}`
+        : '/api/reports/notifications-excel',
   },
 ];
 
 export default function Reports() {
-  const [mandalInput, setMandalInput] = useState('');
+  const [mandalSelections, setMandalSelections] = useState({});
   const [mandals, setMandals] = useState([]);
   const [loadingMandals, setLoadingMandals] = useState(false);
-  const [downloading, setDownloading] = useState(false);
+  const [downloading, setDownloading] = useState({});
 
   /** Unique Mandal names present in the officers AND booths masters. */
   const loadMandals = useCallback(async () => {
@@ -74,14 +84,21 @@ export default function Reports() {
     loadMandals().catch(() => {});
   }, [loadMandals]);
 
-  const downloadForMandal = async (name) => {
-    const target = String(name || mandalInput || '').trim();
-    if (!target) return;
-    setDownloading(true);
+  const setSelection = (reportId, value) => {
+    setMandalSelections((prev) => ({ ...prev, [reportId]: value }));
+  };
+
+  // Download starts ONLY from the Download button. Selecting never downloads.
+  const downloadMandalReport = async (report) => {
+    const selected = String(mandalSelections[report.id] || '').trim();
+    if (report.requireMandal && !selected) return;
+    const url = report.buildUrl(selected);
+    if (!url) return;
+    setDownloading((prev) => ({ ...prev, [report.id]: true }));
     try {
-      await docDownload(`/api/reports/allocated-officers/${encodeURIComponent(target)}`);
+      await docDownload(url);
     } finally {
-      setDownloading(false);
+      setDownloading((prev) => ({ ...prev, [report.id]: false }));
     }
   };
 
@@ -99,21 +116,18 @@ export default function Reports() {
           <div key={report.title} className="card report-card">
             <h3 className="card-title">{report.title}</h3>
             <p className="report-desc">{report.desc}</p>
-            {report.mandalInput ? (
+            {report.mandalSelect ? (
               <div className="mandal-download-row">
                 <select
                   className="input"
-                  value={mandalInput}
-                  onChange={(e) => {
-                    const name = e.target.value;
-                    setMandalInput(name);
-                    // Selecting a Mandal downloads that Mandal's data immediately.
-                    if (name) downloadForMandal(name);
-                  }}
-                  disabled={downloading || loadingMandals}
+                  value={mandalSelections[report.id] || ''}
+                  onChange={(e) => setSelection(report.id, e.target.value)}
+                  disabled={Boolean(downloading[report.id]) || loadingMandals}
                 >
                   <option value="">
-                    {loadingMandals ? 'Loading Mandals…' : 'Select Mandal…'}
+                    {loadingMandals
+                      ? 'Loading Mandals…'
+                      : report.requireMandal ? 'Select Mandal…' : 'All Mandals'}
                   </option>
                   {mandals.map((m) => (
                     <option key={m} value={m}>{m}</option>
@@ -122,10 +136,14 @@ export default function Reports() {
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
-                  onClick={() => downloadForMandal()}
-                  disabled={downloading || !mandalInput.trim()}
+                  onClick={() => downloadMandalReport(report)}
+                  disabled={
+                    Boolean(downloading[report.id]) ||
+                    (report.requireMandal &&
+                      !String(mandalSelections[report.id] || '').trim())
+                  }
                 >
-                  {downloading ? 'Downloading…' : 'Download .xlsx'}
+                  {downloading[report.id] ? 'Downloading…' : 'Download .xlsx'}
                 </button>
               </div>
             ) : (
