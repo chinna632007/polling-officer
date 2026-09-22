@@ -21,3 +21,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Google OAuth token store (mirrors mail-test-server.js)
+tokens.json
+

@@ -48,6 +48,9 @@ export default function Allocation() {
   const [cancelling, setCancelling] = useState(false);
   const [reallocTarget, setReallocTarget] = useState(null);
   const [sendingIds, setSendingIds] = useState(new Set());
+  const [mailingIds, setMailingIds] = useState(new Set());
+  const [confirmMailAll, setConfirmMailAll] = useState(false);
+  const [mailingAll, setMailingAll] = useState(false);
 
   const allocatedList = useMemo(
     () => allocations
@@ -236,6 +239,55 @@ export default function Allocation() {
     }
   };
 
+  /**
+   * E-mails the polling-duty letter for ONE allocation (the "Send Mail"
+   * button in the Allocated Officers table). The letter is composed on the
+   * server from the allocation data, so nothing has to be typed here.
+   */
+  const doSendMail = async (allocation) => {
+    setMailingIds((prev) => new Set(prev).add(allocation._id));
+    try {
+      const { data } = await api.post(`/api/mail/allocation/${allocation._id}`);
+      setNotify({
+        message: data.message || `E-mail sent to ${allocation.officer?.email || 'the officer'}`,
+        type: 'success',
+      });
+    } catch (err) {
+      setNotify({ message: getErrorMessage(err), type: 'error', duration: 8000 });
+    } finally {
+      setMailingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(allocation._id);
+        return next;
+      });
+    }
+  };
+
+  /**
+   * Bulk variant: e-mails every allocated officer that has an e-mail address
+   * in a single request. Officers without an address are reported as skipped
+   * by the API, so the summary always explains what happened.
+   */
+  const doMailAll = async () => {
+    setMailingAll(true);
+    try {
+      const { data } = await api.post('/api/mail/allocation', {
+        allocationIds: allocatedList.map((a) => a._id),
+        limit: 100,
+      });
+      setNotify({
+        message: data.message || 'Allocation letters processed.',
+        type: data.success ? 'success' : 'error',
+        duration: 8000,
+      });
+    } catch (err) {
+      setNotify({ message: getErrorMessage(err), type: 'error', duration: 8000 });
+    } finally {
+      setMailingAll(false);
+      setConfirmMailAll(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page">
@@ -360,7 +412,18 @@ export default function Allocation() {
 
       {tab === 'allocated' ? (
         <div className="card">
-          <h3 className="card-title">Allocated Officers</h3>
+          <div className="card-head">
+            <h3 className="card-title">Allocated Officers</h3>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={mailingAll || allocatedList.length === 0}
+              title="E-mail the polling-duty letter to every allocated officer that has an e-mail address"
+              onClick={() => setConfirmMailAll(true)}
+            >
+              {mailingAll ? 'Mailing…' : 'Mail All Allocated'}
+            </button>
+          </div>
           {allocatedList.length === 0 ? (
             <p className="empty-state">
               No allocations yet. Click &quot;Run Automatic Allocation&quot; to allocate the
@@ -372,7 +435,9 @@ export default function Allocation() {
               onReallocate={(a) => setReallocTarget(a)}
               onCancel={(a) => setCancelTarget(a)}
               onSendNotification={doSendNotification}
+              onSendMail={doSendMail}
               sendingIds={sendingIds}
+              mailingIds={mailingIds}
             />
           )}
         </div>
@@ -503,6 +568,16 @@ export default function Allocation() {
         loading={cancelling}
         onConfirm={doCancel}
         onCancel={() => setCancelTarget(null)}
+      />
+
+      <ConfirmModal
+        open={confirmMailAll}
+        title="E-mail All Allocated Officers"
+        message={`Send the polling-duty allocation letter by e-mail to the ${allocatedList.length} allocated officer(s)? Officers without an e-mail address are skipped automatically (up to 100 per run, and Gmail must be connected).`}
+        confirmLabel="Send Mail"
+        loading={mailingAll}
+        onConfirm={doMailAll}
+        onCancel={() => setConfirmMailAll(false)}
       />
 
       <ReallocateModal

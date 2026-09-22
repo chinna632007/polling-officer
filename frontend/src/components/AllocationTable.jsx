@@ -1,14 +1,5 @@
 import Badge from './Badge';
 import { addressCompatibilityLabel, localityLine } from './addressCompatibility';
-
-/**
- * Full allocation table used on the Allocation page.
- *
- * Columns (spec section 12):
- *   S.No / Officer ID / Name / Designation / Mobile / Mandal /
- *   Officer Locality / Booth No. / Booth Name / Building / Booth Locality /
- *   Status / Allocation Date / Actions
- */
 function formatDate(value) {
   if (!value) return '—';
   const d = new Date(value);
@@ -25,7 +16,9 @@ export default function AllocationTable({
   onReallocate,
   onCancel,
   onSendNotification,
+  onSendMail,
   sendingIds = new Set(),
+  mailingIds = new Set(),
 }) {
   if (loading) {
     return <p className="empty-state">Loading allocations…</p>;
@@ -36,7 +29,11 @@ export default function AllocationTable({
     </p>;
   }
 
-  const showActions = Boolean(onReallocate) || Boolean(onCancel) || Boolean(onSendNotification);
+  const showActions =
+    Boolean(onReallocate) ||
+    Boolean(onCancel) ||
+    Boolean(onSendNotification) ||
+    Boolean(onSendMail);
 
   return (
     <div className="table-wrap">
@@ -48,6 +45,7 @@ export default function AllocationTable({
             <th>Officer Name</th>
             <th>Designation</th>
             <th>Mobile</th>
+            <th>Email</th>
             <th>Mandal</th>
             <th>Officer Locality</th>
             <th>Booth No.</th>
@@ -64,6 +62,7 @@ export default function AllocationTable({
           {allocations.map((a, index) => {
             const compatibility = addressCompatibilityLabel(a);
             const active = a.status === 'ALLOCATED';
+            const email = String(a.officer?.email || '').trim();
             return (
               <tr key={a._id}>
                 <td className="mono">{index + 1}</td>
@@ -73,6 +72,9 @@ export default function AllocationTable({
                 <td>{a.officer?.officerName || '—'}</td>
                 <td>{a.officer?.designation || '—'}</td>
                 <td className="mono">{a.officer?.mobileNumber || '—'}</td>
+                <td>
+                  {email ? <span className="mono">{email}</span> : <span className="muted">—</span>}
+                </td>
                 <td>{a.mandal || a.officer?.mandal || '—'}</td>
                 <td>{localityLine(a.officer)}</td>
                 <td className="mono">{a.booth?.boothNumber || '—'}</td>
@@ -119,6 +121,21 @@ export default function AllocationTable({
                               onClick={() => onSendNotification(a)}
                             >
                               {sendingIds.has(a._id) ? 'Sending…' : 'Send Notification'}
+                            </button>
+                          ) : null}
+                          {onSendMail ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-xs"
+                              disabled={!email || mailingIds.has(a._id)}
+                              title={
+                                email
+                                  ? `E-mail the allocation letter to ${email}`
+                                  : 'This officer has no e-mail address - add one on the Officers page'
+                              }
+                              onClick={() => onSendMail(a)}
+                            >
+                              {mailingIds.has(a._id) ? 'Mailing…' : 'Send Mail'}
                             </button>
                           ) : null}
                         </>

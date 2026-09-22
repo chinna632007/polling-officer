@@ -241,6 +241,15 @@ a { color: var(--primary); text-decoration: none; }
   box-shadow: var(--shadow);
 }
 .card-title { font-size: 16px; color: var(--navy); font-weight: 700; margin-bottom: 12px; }
+/* Card header row: title on the left, action button(s) on the right. */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.card-head .card-title { margin-bottom: 0; }
 
 .empty-state {
   padding: 26px 12px;

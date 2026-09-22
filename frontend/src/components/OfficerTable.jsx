@@ -22,6 +22,7 @@ export default function OfficerTable({ officers = [], onEdit, onDelete, loading 
             <th>Officer Name</th>
             <th>Designation</th>
             <th>Mobile</th>
+            <th>Email</th>
             <th>Locality</th>
             <th>Ward</th>
             <th>Mandal</th>
@@ -39,6 +40,9 @@ export default function OfficerTable({ officers = [], onEdit, onDelete, loading 
               <td>{o.officerName}</td>
               <td>{o.designation}</td>
               <td className="mono">{o.mobileNumber}</td>
+              <td>
+                {o.email ? <span className="mono">{o.email}</span> : <span className="muted">—</span>}
+              </td>
               <td>{o.locality || '—'}</td>
               <td>{o.ward || '—'}</td>
               <td>

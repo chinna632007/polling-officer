@@ -220,6 +220,69 @@ Every officer can hold at most **one** allocation (enforced by a partial unique
 index in MongoDB), and booth capacity is never exceeded.
 ---
 
+## Gmail (E-mail) Sending
+
+Notification e-mails go out through the **Gmail API** (OAuth 2.0) - no SMTP
+passwords anywhere. Access tokens are refreshed automatically and the refresh
+token is persisted in MongoDB, so the connection survives server restarts.
+While no account is connected, every mail endpoint answers `503` with a clear
+hint instead of failing silently.
+
+### One-time Google Cloud setup
+
+1. Open <https://console.cloud.google.com> and create/select a project.
+2. **APIs & Services → Library** → search **Gmail API** → **Enable**.
+3. **APIs & Services → OAuth consent screen** → type *External* → fill the app
+   name and support e-mail → add the sending Gmail address under **Test users**
+   (required while the consent screen is in *Testing*).
+4. **Credentials → Create credentials → OAuth client ID** → *Web application* →
+   Authorized redirect URI: `http://localhost:5000/auth/google/callback`
+   (it must match `GOOGLE_REDIRECT_URI` and the running `PORT`).
+
+### Connect the Gmail account (once per server)
+
+With the backend running, open <http://localhost:5000/auth/google> in a browser
+and accept the consent screen. The callback page confirms the linked account
+and shows the (optionally pinnable) `.env` snippet. Without pinning, the token
+is loaded from MongoDB on every boot; when `GOOGLE_REFRESH_TOKEN` is set in
+`.env`, that value wins.
+
+### Related `.env` variables
+
+| Variable | Purpose |
+| --- | --- |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth client credentials (step 4) |
+| `GOOGLE_REDIRECT_URI` | must equal the redirect URI registered in Google Cloud |
+| `GOOGLE_REFRESH_TOKEN` | optional manual override of the MongoDB-stored token |
+| `GMAIL_FROM` / `GMAIL_FROM_NAME` | sender address / display name for outgoing mail |
+
+### Mail endpoints
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/api/mail/status` | Connection state (configured / connected / account) |
+| POST | `/api/mail/send` | Free-form e-mail (`to`, `subject`, `text`/`html`, `cc`, `bcc`, `replyTo`) |
+| POST | `/api/mail/allocation/:allocationId` | Polling-duty letter for one allocation |
+| POST | `/api/mail/allocation` | Bulk letters - body `{ "allocationIds": [...] }` or `{ "mandal": "..." }`, max 100 |
+| POST | `/api/mail/test` | Test message to the connected mailbox |
+| POST | `/api/mail/disconnect` | Forget the stored token (Super Admin) |
+
+In the frontend, **Allocation → Allocated Officers** has a **Send Mail** button
+on every row (next to *Send Notification*) and a **Mail All Allocated** button
+on the card header. Officers without an e-mail address are skipped and counted,
+so the summary always explains what happened.
+
+## Swagger API Documentation
+
+Interactive OpenAPI 3 documentation is served by the backend:
+
+- **Swagger UI:** `http://localhost:5000/api-docs`
+- **Raw JSON:** `http://localhost:5000/api-docs.json`
+
+Click **Authorize**, paste the JWT from `/api/auth/login`, and every protected
+endpoint can be executed directly from the browser (the UI keeps the token
+across page reloads).
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
@@ -251,11 +314,15 @@ index in MongoDB), and booth capacity is never exceeded.
 | GET | `/api/reports/allocated-officers/:mandal` | Allocated officers for a single Mandal (.xlsx, case-insensitive) |
 | GET | `/api/reports/unallocated-officers` | Unallocated officers report (.xlsx) |
 | GET | `/api/reports/notifications-excel` | Notification status report (.xlsx) |
+| POST | `/api/mail/send` | Send an e-mail through the Gmail API (OAuth) |
+| GET | `/api/mail/status` | Gmail connection status |
 | GET | `/api/dashboard/stats` | Dashboard statistics |
 | GET | `/api/health` | Health check |
 
 All endpoints except `/api/auth/login` and `/api/health` require the JWT header:
 `Authorization: Bearer <token>`.
+
+Interactive docs: Swagger UI at `/api-docs`, raw JSON at `/api-docs.json`.
 
 ---
 
@@ -297,6 +364,17 @@ it finishes, wipe its test records (everything named `OFF-E2E-*` /
 npm run cleanup-e2e
 ```
 
+### 3. Mail + Swagger Verification (requires MongoDB + running server)
+
+Logs in, fetches the Swagger spec, verifies the UI is served, checks the Gmail
+connection status and the validation of the mail endpoints. Add `--to=` with a
+real address to also deliver one test e-mail:
+
+```bash
+cd backend
+npm run verify-mail
+```
+
 ---
 
 ## Security Notes
@@ -306,16 +384,14 @@ npm run cleanup-e2e
 - Input is validated with `express-validator` (body + URL params).
 - Excel rows are validated before insertion (required columns, duplicates, formats).
 - Database passwords and SMS credentials live in `.env`/**only** – never exposed.
+- Gmail OAuth refresh tokens are stored in MongoDB and are never returned by the API (only a masked preview is shown after connecting).
 
 ---
 
 ## Environment Variables
 
 - `backend/.env.example` – all backend variables (PORT, MONGODB_URI, JWT_SECRET,
-  ADMIN_USERNAME/PASSWORD, SMS_*).
+  ADMIN_USERNAME/PASSWORD, SMS_*, GOOGLE_*, GMAIL_*).
 - `frontend/.env.example` – `VITE_API_BASE_URL` (leave blank to use the dev proxy).
 
-Never commit real `.env` files.#   p o l l i n g - o f f i c e r  
- #   p o l l i n g - o f f i c e r  
- #   p o l l i n g - o f f i c e r  
- 
+Never commit real `.env` files.
