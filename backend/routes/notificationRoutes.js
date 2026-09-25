@@ -4,6 +4,7 @@ const {
   sendAllocationNotification,
   getNotifications,
   resendNotification,
+  sendAllNotifications,
 } = require('../controllers/notificationController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 const { ROLES } = require('../services/roleService');
@@ -28,6 +29,14 @@ router.post(
   handleValidationErrors,
   authorize(ROLES.SUPER_ADMIN, ROLES.ALLOCATION_OFFICER),
   resendNotification
+);
+
+// POST /api/notifications/send-all
+// Bulk SMS: every ALLOCATED officer (optionally body { mandal: "..." }), max 100.
+router.post(
+  '/send-all',
+  authorize(ROLES.SUPER_ADMIN, ROLES.ALLOCATION_OFFICER),
+  sendAllNotifications
 );
 
 // GET /api/notifications (server-scoped for Mandal Officers)

@@ -268,9 +268,10 @@ is loaded from MongoDB on every boot; when `GOOGLE_REFRESH_TOKEN` is set in
 | POST | `/api/mail/disconnect` | Forget the stored token (Super Admin) |
 
 In the frontend, **Allocation → Allocated Officers** has a **Send Mail** button
-on every row (next to *Send Notification*) and a **Mail All Allocated** button
-on the card header. Officers without an e-mail address are skipped and counted,
-so the summary always explains what happened.
+on every row (next to *Send Notification*) and **Mail All Allocated** plus
+**Notify All Allocated** buttons on the card header. Officers without an
+e-mail address / mobile number are skipped and counted, so the summary always
+explains what happened.
 
 ## Swagger API Documentation
 
@@ -306,6 +307,7 @@ across page reloads).
 | POST | `/api/allocation/:id/reallocate` | Reallocate officer |
 | POST | `/api/allocation/:id/cancel` | Cancel an allocation |
 | POST | `/api/notifications/send/:allocationId` | Send SMS to the officer |
+| POST | `/api/notifications/send-all` | Bulk SMS to every allocated officer (body optional: `{ "allocationIds": [...] }` or `{ "mandal": "..." }`), max 100 |
 | GET | `/api/notifications` | List notification statuses |
 | GET | `/api/reports/officers-excel` | Officer list report (.xlsx) |
 | GET | `/api/reports/booths-excel` | Booth list report (.xlsx) |

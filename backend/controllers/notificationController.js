@@ -113,4 +113,94 @@ async function resendNotification(req, res, next) {
   }
 }
 
-module.exports = { sendAllocationNotification, getNotifications, resendNotification };
+/**
+ * POST /api/notifications/send-all
+ * Bulk variant: sends the polling-duty SMS to EVERY allocated officer
+ * (optionally narrowed to one Mandal via body { mandal }). Reuses the same
+ * validation + smsService pipeline as the single-send endpoint.
+ */
+async function sendAllNotifications(req, res, next) {
+  try {
+    const max = 100;
+    const filter = { status: 'ALLOCATED' };
+
+    const body = req.body || {};
+    const allocationIds = Array.isArray(body.allocationIds) ? body.allocationIds : [];
+    const mandal = String(body.mandal || '').trim();
+
+    if (allocationIds.length) {
+      filter._id = { $in: allocationIds };
+    } else if (mandal) {
+      const re = new RegExp(`^${mandal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      filter.$or = [{ mandal: re }, { 'officer.mandal': re }];
+    }
+
+    const allocations = await Allocation.find(filter)
+      .populate('officer')
+      .populate('booth')
+      .limit(max);
+
+    if (!allocations.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'No ALLOCATED allocations match the request',
+      });
+    }
+
+    let sent = 0;
+    let failed = 0;
+    let skipped = 0;
+    const failures = [];
+
+    for (const allocation of allocations) {
+      if (!allocation.booth) {
+        skipped += 1;
+        continue;
+      }
+      if (!allocation.officer || !allocation.officer.mobileNumber) {
+        skipped += 1;
+        failures.push({
+          allocationId: allocation._id,
+          officer: allocation.officer?.officerName || '',
+          reason: 'no mobile number',
+        });
+        continue;
+      }
+      try {
+        const message = smsService.buildAllocationMessage(allocation.officer, allocation.booth);
+        const notification = await smsService.sendSms({
+          officer: allocation.officer,
+          allocation,
+          message,
+        });
+        if (notification.status === 'FAILED') {
+          failed += 1;
+          failures.push({
+            allocationId: allocation._id,
+            officer: allocation.officer.officerName || '',
+            reason: notification.error || 'provider failure',
+          });
+        } else {
+          sent += 1;
+        }
+      } catch (error) {
+        failed += 1;
+        failures.push({
+          allocationId: allocation._id,
+          officer: allocation.officer?.officerName || '',
+          reason: error.message,
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Notifications processed: ${sent} sent, ${failed} failed, ${skipped} skipped.`,
+      data: { total: allocations.length, sent, failed, skipped, failures },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { sendAllocationNotification, getNotifications, resendNotification, sendAllNotifications };

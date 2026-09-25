@@ -51,6 +51,8 @@ export default function Allocation() {
   const [mailingIds, setMailingIds] = useState(new Set());
   const [confirmMailAll, setConfirmMailAll] = useState(false);
   const [mailingAll, setMailingAll] = useState(false);
+  const [confirmNotifyAll, setConfirmNotifyAll] = useState(false);
+  const [notifyingAll, setNotifyingAll] = useState(false);
 
   const allocatedList = useMemo(
     () => allocations
@@ -288,6 +290,32 @@ export default function Allocation() {
     }
   };
 
+  /**
+   * Bulk SMS: sends the polling-duty notification to every allocated officer
+   * in a single request (the "Notify All" button). Officers without a mobile
+   * number are reported as skipped by the API.
+   */
+  const doNotifyAll = async () => {
+    setNotifyingAll(true);
+    try {
+      const { data } = await api.post('/api/notifications/send-all', {
+        allocationIds: allocatedList.map((a) => a._id),
+        limit: 100,
+      });
+      setNotify({
+        message: data.message || 'Notifications processed.',
+        type: data.success ? 'success' : 'error',
+        duration: 8000,
+      });
+      await fetchAll('Refreshing notification data...');
+    } catch (err) {
+      setNotify({ message: getErrorMessage(err), type: 'error', duration: 8000 });
+    } finally {
+      setNotifyingAll(false);
+      setConfirmNotifyAll(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page">
@@ -414,15 +442,26 @@ export default function Allocation() {
         <div className="card">
           <div className="card-head">
             <h3 className="card-title">Allocated Officers</h3>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              disabled={mailingAll || allocatedList.length === 0}
-              title="E-mail the polling-duty letter to every allocated officer that has an e-mail address"
-              onClick={() => setConfirmMailAll(true)}
-            >
-              {mailingAll ? 'Mailing…' : 'Mail All Allocated'}
-            </button>
+            <div className="btn-row">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={notifyingAll || allocatedList.length === 0}
+                title="Send the polling-duty SMS notification to every allocated officer"
+                onClick={() => setConfirmNotifyAll(true)}
+              >
+                {notifyingAll ? 'Notifying…' : 'Notify All Allocated'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={mailingAll || allocatedList.length === 0}
+                title="E-mail the polling-duty letter to every allocated officer that has an e-mail address"
+                onClick={() => setConfirmMailAll(true)}
+              >
+                {mailingAll ? 'Mailing…' : 'Mail All Allocated'}
+              </button>
+            </div>
           </div>
           {allocatedList.length === 0 ? (
             <p className="empty-state">
@@ -578,6 +617,16 @@ export default function Allocation() {
         loading={mailingAll}
         onConfirm={doMailAll}
         onCancel={() => setConfirmMailAll(false)}
+      />
+
+      <ConfirmModal
+        open={confirmNotifyAll}
+        title="Notify All Allocated Officers"
+        message={`Send the polling-duty SMS notification to the ${allocatedList.length} allocated officer(s)? Officers without a mobile number are skipped automatically (up to 100 per run).`}
+        confirmLabel="Send Notifications"
+        loading={notifyingAll}
+        onConfirm={doNotifyAll}
+        onCancel={() => setConfirmNotifyAll(false)}
       />
 
       <ReallocateModal
