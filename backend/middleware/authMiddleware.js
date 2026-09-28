@@ -1,4 +1,3 @@
-const jwt = require('jsonwebtoken');
 const Admin = require('../models/Admin');
 const roleService = require('../services/roleService');
 
@@ -8,21 +7,21 @@ function unauthorized(res, message) {
 }
 
 /**
- * Protects every protected route. Verifies the Bearer JWT, loads the user,
- * checks the account is still active, and attaches the sanitized document to
- * req.user (req.admin is kept for backward compatibility).
+ * Protects every protected route. Reads the signed, HttpOnly session cookie
+ * (managed by express-session), loads the user, checks the account is still
+ * active, and attaches the sanitized document to req.user (req.admin is kept
+ * for backward compatibility).
  */
 async function protect(req, res, next) {
   try {
-    const header = req.headers.authorization || '';
-    if (!header.startsWith('Bearer ')) {
-      return unauthorized(res, 'Not authorized - missing token');
+    if (!req.session || !req.session.adminId) {
+      return unauthorized(res, 'Not authorized - please log in');
     }
-    const token = header.slice(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await Admin.findById(decoded.id).select('-password').lean();
+    const user = await Admin.findById(req.session.adminId).select('-password').lean();
     if (!user) {
+      // The session points at a deleted account - kill the stale session.
+      req.session.destroy(() => {});
       return unauthorized(res, 'Not authorized - account no longer exists');
     }
     if (user.status === 'inactive') {
@@ -34,12 +33,9 @@ async function protect(req, res, next) {
     req.user = roleService.sanitizeUser(user);
     req.admin = req.user;
     return next();
-  } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      return unauthorized(res, 'Session expired - please log in again');
+    } catch (error) {
+      return unauthorized(res, 'Not authorized - invalid session');
     }
-    return unauthorized(res, 'Not authorized - invalid token');
-  }
 }
 
 /**

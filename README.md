@@ -262,16 +262,19 @@ is loaded from MongoDB on every boot; when `GOOGLE_REFRESH_TOKEN` is set in
 | --- | --- | --- |
 | GET | `/api/mail/status` | Connection state (configured / connected / account) |
 | POST | `/api/mail/send` | Free-form e-mail (`to`, `subject`, `text`/`html`, `cc`, `bcc`, `replyTo`) |
-| POST | `/api/mail/allocation/:allocationId` | Polling-duty letter for one allocation |
-| POST | `/api/mail/allocation` | Bulk letters - body `{ "allocationIds": [...] }` or `{ "mandal": "..." }`, max 100 |
+| POST | `/api/mail/allocation/:allocationId` | ID-card link mail for one allocation (mandal + download link, no attachment) |
+| POST | `/api/mail/allocation` | Bulk ID-card link mails - body `{ "allocationIds": [...] }` or `{ "mandal": "..." }`, max 100 |
 | POST | `/api/mail/test` | Test message to the connected mailbox |
 | POST | `/api/mail/disconnect` | Forget the stored token (Super Admin) |
 
 In the frontend, **Allocation → Allocated Officers** has a **Send Mail** button
 on every row (next to *Send Notification*) and **Mail All Allocated** plus
-**Notify All Allocated** buttons on the card header. Officers without an
-e-mail address / mobile number are skipped and counted, so the summary always
-explains what happened.
+**Notify All Allocated** buttons on the card header. The mail is short: it
+tells the officer which Mandal they were allocated to and contains the
+tokenised link to their Polling Duty ID card PDF (opening the link marks the
+card **Received**; see the *ID Card Received* column on the Notifications
+page). Officers without an e-mail address / mobile number are skipped and
+counted, so the summary always explains what happened.
 
 ## Swagger API Documentation
 

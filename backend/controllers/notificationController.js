@@ -1,6 +1,9 @@
 const Allocation = require('../models/Allocation');
 const Notification = require('../models/Notification');
+const IdCard = require('../models/IdCard');
 const smsService = require('../services/smsService');
+const idCardService = require('../services/idCardService');
+const mailService = require('../services/mailService');
 const { notificationScopeFilter } = require('../services/roleService');
 
 async function sendAllocationNotification(req, res, next) {
@@ -28,17 +31,44 @@ async function sendAllocationNotification(req, res, next) {
       return res.status(404).json({ success: false, message: 'Officer record missing' });
     }
 
-    const message = smsService.buildAllocationMessage(allocation.officer, allocation.booth);
+    // 1) The duty ID card is generated (or reused from cache) FIRST so the
+    //    officer receives/downloads it together with the SMS. A card failure
+    //    must not block the SMS - it is logged and reported in the response.
+    let cardUrl = null;
+    let cardIssued = false;
+    try {
+      const card = await idCardService.getOrCreateCard(allocation._id);
+      cardUrl = idCardService.publicCardUrl(card);
+      cardIssued = true;
+    } catch (cardError) {
+      console.error('[NOTIFY] ID card generation failed:', cardError.message);
+    }
+
+    // 2) SMS with the booth details + (when available) the card download link.
+    const message = smsService.buildAllocationMessage(allocation.officer, allocation.booth, { cardUrl });
     const notification = await smsService.sendSms({
       officer: allocation.officer,
       allocation,
       message,
     });
 
+    // 3) Best-effort: e-mail the SAME ID card download link (no attachment)
+    //    when the officer has an e-mail address. Failures never fail the request.
+    let email = null;
+    if (allocation.officer.email) {
+      try {
+        email = await mailService.sendAllocationLetter(allocation);
+      } catch (mailError) {
+        email = { status: 'failed', reason: mailError.message };
+      }
+    }
+
     return res.status(200).json({
       success: true,
       message: `Notification queued with status '${notification.status}'`,
       data: notification,
+      idCard: { issued: cardIssued, url: cardUrl, received: false },
+      email,
     });
   } catch (error) {
     next(error);
@@ -76,38 +106,51 @@ async function getNotifications(req, res, next) {
       Notification.countDocuments(filter),
     ]);
 
+    // Embed the CURRENT ID-card "received" state per row (not a snapshot):
+    // the officer received the card when the tokenised download link was
+    // opened for the first time (idCardController.downloadByToken).
+    const allocIds = [
+      ...new Set(
+        data
+          .map((n) => (n.allocation ? String(n.allocation._id || n.allocation) : null))
+          .filter(Boolean)
+      ),
+    ];
+    let cardsByAllocation = new Map();
+    if (allocIds.length) {
+      const cards = await IdCard.find({ allocationId: { $in: allocIds } })
+        .select('allocationId receivedAt downloadCount lastDownloadedAt filename')
+        .lean();
+      cardsByAllocation = new Map(cards.map((c) => [String(c.allocationId), c]));
+    }
+    const rows = data.map((n) => {
+      const allocId = n.allocation ? String(n.allocation._id || n.allocation) : null;
+      const card = allocId ? cardsByAllocation.get(allocId) : null;
+      return {
+        ...n,
+        idCard: card
+          ? {
+              issued: true,
+              filename: card.filename || '',
+              receivedAt: card.receivedAt || null,
+              lastDownloadedAt: card.lastDownloadedAt || null,
+              downloadCount: card.downloadCount || 0,
+            }
+          : {
+              issued: false,
+              filename: '',
+              receivedAt: null,
+              lastDownloadedAt: null,
+              downloadCount: 0,
+            },
+      };
+    });
+
     return res.json({
       success: true,
-      data,
+      data: rows,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     });
-  } catch (error) {
-    next(error);
-  }
-}
-
-async function resendNotification(req, res, next) {
-  try {
-    const Notification = require('../models/Notification');
-    const notification = await Notification.findById(req.params.id).populate('officer');
-    if (!notification) {
-      return res.status(404).json({ success: false, message: 'Notification not found' });
-    }
-    const smsService = require('../services/smsService');
-    const provider = smsService.createProvider();
-    try {
-      const result = await provider.send(notification.mobileNumber, notification.message);
-      notification.status = provider.name === 'mock' ? smsService.STATUS.DEMO_SENT : (result.delivered ? 'SENT' : 'PENDING');
-      notification.providerMessageId = result.messageId;
-      notification.sentAt = new Date();
-      notification.error = undefined;
-      await notification.save();
-    } catch (error) {
-      notification.status = 'FAILED';
-      notification.error = error.message;
-      await notification.save();
-    }
-    return res.json({ success: true, message: 'Notification re-sent with status ' + notification.status, data: notification });
   } catch (error) {
     next(error);
   }
@@ -150,6 +193,8 @@ async function sendAllNotifications(req, res, next) {
     let sent = 0;
     let failed = 0;
     let skipped = 0;
+    let cardsIssued = 0;
+    let emailed = 0;
     const failures = [];
 
     for (const allocation of allocations) {
@@ -167,7 +212,18 @@ async function sendAllNotifications(req, res, next) {
         continue;
       }
       try {
-        const message = smsService.buildAllocationMessage(allocation.officer, allocation.booth);
+        // ID card first (best-effort): the SMS carries the download link and
+        // the officer also gets the card by e-mail when an address exists.
+        let cardUrl = null;
+        try {
+          const card = await idCardService.getOrCreateCard(allocation._id);
+          cardUrl = idCardService.publicCardUrl(card);
+          cardsIssued += 1;
+        } catch (cardError) {
+          console.error('[NOTIFY] ID card generation failed:', cardError.message);
+        }
+
+        const message = smsService.buildAllocationMessage(allocation.officer, allocation.booth, { cardUrl });
         const notification = await smsService.sendSms({
           officer: allocation.officer,
           allocation,
@@ -182,6 +238,16 @@ async function sendAllNotifications(req, res, next) {
           });
         } else {
           sent += 1;
+          // Best-effort: e-mail the same card (PDF attachment). Never fails
+          // the bulk run.
+          if (allocation.officer.email) {
+            try {
+              const emailResult = await mailService.sendAllocationLetter(allocation);
+              if (emailResult && emailResult.status === 'sent') emailed += 1;
+            } catch (mailError) {
+              console.error('[NOTIFY] bulk e-mail failed:', mailError.message);
+            }
+          }
         }
       } catch (error) {
         failed += 1;
@@ -195,12 +261,12 @@ async function sendAllNotifications(req, res, next) {
 
     return res.status(200).json({
       success: true,
-      message: `Notifications processed: ${sent} sent, ${failed} failed, ${skipped} skipped.`,
-      data: { total: allocations.length, sent, failed, skipped, failures },
+      message: `Notifications processed: ${sent} sent, ${failed} failed, ${skipped} skipped. ID cards issued: ${cardsIssued}. E-mails sent: ${emailed}.`,
+      data: { total: allocations.length, sent, failed, skipped, cardsIssued, emailed, failures },
     });
   } catch (error) {
     next(error);
   }
 }
 
-module.exports = { sendAllocationNotification, getNotifications, resendNotification, sendAllNotifications };
+module.exports = { sendAllocationNotification, getNotifications, sendAllNotifications };

@@ -135,10 +135,10 @@ function createProvider(providerName) {
  *   Dear {Name}, You have been allocated for Polling Duty.
  *   Booth Number / Booth Name / Booth Address / Mandal ...
  */
-function buildAllocationMessage(officer, booth) {
+function buildAllocationMessage(officer, booth, options = {}) {
   const b = booth || {};
   const o = officer || {};
-  return [
+  const lines = [
     `Dear ${o.officerName || o.name || 'Officer'},`,
     '',
     'You have been allocated for election duty.',
@@ -152,7 +152,13 @@ function buildAllocationMessage(officer, booth) {
     'Please report as instructed by the Election Administration.',
     '',
     'Thank you.',
-  ].join('\n');
+  ];
+  // The officer's ID card is generated (and cached) when the notification is
+  // sent; the tokenised download link lets the officer open the PDF on a phone.
+  if (options.cardUrl) {
+    lines.push('', `Polling duty ID Card (PDF): ${options.cardUrl}`);
+  }
+  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------

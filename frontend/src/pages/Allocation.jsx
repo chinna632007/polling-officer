@@ -242,8 +242,9 @@ export default function Allocation() {
   };
 
   /**
-   * E-mails the polling-duty letter for ONE allocation (the "Send Mail"
-   * button in the Allocated Officers table). The letter is composed on the
+   * E-mails the SHORT allocation mail for ONE allocation (the "Send Mail"
+   * button in the Allocated Officers table): "allocated to <Mandal> mandal"
+   * plus the tokenised ID-card download link. The mail is composed on the
    * server from the allocation data, so nothing has to be typed here.
    */
   const doSendMail = async (allocation) => {
@@ -266,6 +267,19 @@ export default function Allocation() {
   };
 
   /**
+   * Downloads/opens the officer's generated Polling Duty ID card (PDF). The
+   * card is rendered server-side (pdfkit) from the allocation data and cached,
+   * so this works for every ALLOCATED officer — even before any mail or SMS
+   * was sent. Uses the shared download helper (session-cookie auth).
+   */
+  const doDownloadIdCard = async (allocation) => {
+    await docDownload(
+      `/api/idcards/allocation/${allocation._id}`,
+      `ID-Card-${allocation.officer?.officerId || 'officer'}.pdf`
+    );
+  };
+
+  /**
    * Bulk variant: e-mails every allocated officer that has an e-mail address
    * in a single request. Officers without an address are reported as skipped
    * by the API, so the summary always explains what happened.
@@ -278,7 +292,7 @@ export default function Allocation() {
         limit: 100,
       });
       setNotify({
-        message: data.message || 'Allocation letters processed.',
+        message: data.message || 'ID-card link mails processed.',
         type: data.success ? 'success' : 'error',
         duration: 8000,
       });
@@ -475,6 +489,7 @@ export default function Allocation() {
               onCancel={(a) => setCancelTarget(a)}
               onSendNotification={doSendNotification}
               onSendMail={doSendMail}
+              onDownloadIdCard={doDownloadIdCard}
               sendingIds={sendingIds}
               mailingIds={mailingIds}
             />
@@ -612,7 +627,7 @@ export default function Allocation() {
       <ConfirmModal
         open={confirmMailAll}
         title="E-mail All Allocated Officers"
-        message={`Send the polling-duty allocation letter by e-mail to the ${allocatedList.length} allocated officer(s)? Officers without an e-mail address are skipped automatically (up to 100 per run, and Gmail must be connected).`}
+        message={`E-mail the ID card download link to the ${allocatedList.length} allocated officer(s)? Each officer gets a short mail naming their Mandal plus the link to their Polling Duty ID card PDF. Officers without an e-mail address are skipped automatically (up to 100 per run, and Gmail must be connected).`}
         confirmLabel="Send Mail"
         loading={mailingAll}
         onConfirm={doMailAll}

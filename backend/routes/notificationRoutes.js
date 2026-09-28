@@ -3,7 +3,6 @@ const { param } = require('express-validator');
 const {
   sendAllocationNotification,
   getNotifications,
-  resendNotification,
   sendAllNotifications,
 } = require('../controllers/notificationController');
 const { protect, authorize } = require('../middleware/authMiddleware');
@@ -21,14 +20,6 @@ router.post(
   handleValidationErrors,
   authorize(ROLES.SUPER_ADMIN, ROLES.ALLOCATION_OFFICER),
   sendAllocationNotification
-);
-
-router.post(
-  '/resend/:id',
-  param('id').isMongoId().withMessage('Invalid notification id'),
-  handleValidationErrors,
-  authorize(ROLES.SUPER_ADMIN, ROLES.ALLOCATION_OFFICER),
-  resendNotification
 );
 
 // POST /api/notifications/send-all

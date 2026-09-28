@@ -939,6 +939,30 @@ a { color: var(--primary); text-decoration: none; }
 .register-form { display: flex; flex-direction: column; gap: 12px; }
 .register-form .form-actions { margin-top: 4px; }
 
+/* Public employee-registration page (reuses the login page look, wider card) */
+.login-card-wide { max-width: 720px; }
+.register-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+.register-success-id {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--navy);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  text-align: center;
+  margin: 12px 0 4px;
+}
+
 @media (max-width: 900px) {
   .register-grid { grid-template-columns: 1fr; }
 }
@@ -993,4 +1017,38 @@ a { color: var(--primary); text-decoration: none; }
   .boothwise-grid { grid-template-columns: 1fr; }
   .toast { top: 12px; right: 12px; left: 12px; max-width: none; }
   .toolbar .input { min-width: 100%; }
+}
+
+.login-form label .req { color: #dc2626; font-weight: 700; margin-left: 2px; }
+
+/* ---- Google sign-in (Login page) ---- */
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 14px;
+  color: #94a3b8;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e2e8f0;
+}
+.btn-outline {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+}
+.btn-outline:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+.btn-outline:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }

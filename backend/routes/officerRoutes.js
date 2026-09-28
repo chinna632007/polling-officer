@@ -7,13 +7,57 @@ const {
   updateOfficer,
   deleteOfficer,
   deleteAllOfficers,
+  registerOfficer,
 } = require('../controllers/officerController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 const { ROLES } = require('../services/roleService');
 const { handleValidationErrors } = require('../middleware/validationMiddleware');
+const { rateLimit } = require('../middleware/rateLimitMiddleware');
 
 const router = express.Router();
-router.use(protect); // all officer endpoints require a valid JWT
+
+// ---------------------------------------------------------------------------
+// PUBLIC employee self-registration (NO JWT - declared BEFORE the protect
+// middleware below):
+//   POST /api/officers/register
+// Employees fill in their details and go straight into the employees list -
+// there is NO approval workflow and they never receive login credentials
+// (only admins can log in). Rate-limited because it is publicly reachable.
+// ---------------------------------------------------------------------------
+const registerRules = [
+  // isString() FIRST: object payloads (NoSQL-injection attempts like
+  // {"$gt":""}) are rejected as type errors instead of being stringified.
+  body('officerName').isString().trim().isLength({ min: 2, max: 80 }).withMessage('Full name must be 2-80 characters'),
+  body('designation').isString().trim().isLength({ min: 2, max: 60 }).withMessage('Designation must be 2-60 characters'),
+  body('mobileNumber')
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('Mobile Number is required')
+    .matches(/^[0-9+\-\s]{10,15}$/)
+    .withMessage('Invalid mobile number'),
+  body('email').trim().isEmail().withMessage('A valid e-mail address is required').normalizeEmail(),
+  body('mandal').isString().trim().isLength({ min: 2, max: 60 }).withMessage('Mandal is required (2-60 characters)'),
+  // ALL registration fields are REQUIRED (per specification) - the public
+  // self-registration form must not accept partial addresses.
+  body('district').isString().trim().notEmpty().withMessage('District is required').isLength({ max: 60 }).withMessage('District is too long'),
+  body('houseNo').isString().trim().notEmpty().withMessage('House No. is required').isLength({ max: 20 }).withMessage('House No. is too long'),
+  body('street').isString().trim().notEmpty().withMessage('Street is required').isLength({ max: 80 }).withMessage('Street is too long'),
+  body('locality').isString().trim().notEmpty().withMessage('Village/Locality is required').isLength({ max: 80 }).withMessage('Locality is too long'),
+  body('ward').isString().trim().notEmpty().withMessage('Ward is required').isLength({ max: 30 }).withMessage('Ward is too long'),
+  body('pinCode').isString().trim().notEmpty().withMessage('PIN Code is required').matches(/^\d{6}$/).withMessage('PIN Code must be 6 digits'),
+];
+
+router.post(
+  '/register',
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 30, message: 'Too many registration attempts' }),
+  registerRules,
+  handleValidationErrors,
+  registerOfficer
+);
+
+// All remaining officer endpoints require a valid JWT.
+router.use(protect);
 
 // Roles that may create/edit officer records.
 const MANAGER = [ROLES.SUPER_ADMIN, ROLES.ALLOCATION_OFFICER];

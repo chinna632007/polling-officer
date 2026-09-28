@@ -33,24 +33,42 @@ const SWAGGER_OPTIONS = {
   },
 };
 
-/** Mounts the docs endpoints on the given Express app. */
-function mountSwagger(app, { basePath = '/api-docs' } = {}) {
+/**
+ * Mounts the docs endpoints on the given Express app.
+ * `guard` (optional) is a middleware or array of middlewares (e.g. Basic-Auth
+ * login + rate limiter) applied to EVERY doc route - the UI, the spec JSON
+ * and the /swagger.json alias - so there is no unprotected backdoor.
+ */
+function mountSwagger(app, { basePath = '/api-docs', guard = null } = {}) {
+  const guards = guard ? [].concat(guard) : [];
+  const withGuard = (handler) => [...guards, handler];
+
   // Raw JSON specification (also what Swagger UI loads).
-  app.get(`${basePath}.json`, (req, res) => {
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-store');
-    return res.send(JSON.stringify(spec, null, 2));
-  });
+  app.get(
+    `${basePath}.json`,
+    withGuard((req, res) => {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(JSON.stringify(spec, null, 2));
+    })
+  );
 
   // Convenience alias for tools that expect /swagger.json.
-  app.get('/swagger.json', (req, res) => {
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    return res.send(JSON.stringify(spec, null, 2));
-  });
+  app.get(
+    '/swagger.json',
+    withGuard((req, res) => {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      return res.send(JSON.stringify(spec, null, 2));
+    })
+  );
 
   // Interactive UI. `swaggerUi.setup` also gets the object so the very first
   // render works even before the JSON request completes.
-  app.use(basePath, swaggerUi.serve, swaggerUi.setup(spec, SWAGGER_OPTIONS));
+  if (guards.length > 0) {
+    app.use(basePath, ...guards, swaggerUi.serve, swaggerUi.setup(spec, SWAGGER_OPTIONS));
+  } else {
+    app.use(basePath, swaggerUi.serve, swaggerUi.setup(spec, SWAGGER_OPTIONS));
+  }
 
   return spec;
 }

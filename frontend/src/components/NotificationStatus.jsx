@@ -1,7 +1,14 @@
 import Badge from './Badge';
 
+/** Tooltip for the Received badge: first download time + total downloads. */
+function receivedTitle(card) {
+  const first = card.receivedAt ? new Date(card.receivedAt).toLocaleString() : '';
+  const count = card.downloadCount || 1;
+  return `Downloaded ${first}${count > 1 ? ` · ${count} downloads` : ''}`;
+}
+
 /** Renders one notification row with its delivery status. */
-export default function NotificationStatus({ notifications = [], loading, onResend }) {
+export default function NotificationStatus({ notifications = [], loading }) {
   if (loading) {
     return <p className="empty-state">Loading notifications…</p>;
   }
@@ -22,9 +29,9 @@ export default function NotificationStatus({ notifications = [], loading, onRese
             <th>Mandal</th>
             <th>Message</th>
             <th>Status</th>
+            <th>ID Card Received</th>
             <th>Created Date</th>
             <th>Sent Date</th>
-            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -48,15 +55,21 @@ export default function NotificationStatus({ notifications = [], loading, onRese
               <td>
                 <Badge>{n.status}</Badge>
               </td>
+              <td>
+                {n.idCard?.issued ? (
+                  n.idCard.receivedAt ? (
+                    <span title={receivedTitle(n.idCard)}>
+                      <Badge tone="green">Received</Badge>
+                    </span>
+                  ) : (
+                    <Badge tone="amber">Not received</Badge>
+                  )
+                ) : (
+                  <span className="muted">—</span>
+                )}
+              </td>
               <td>{n.createdAt ? new Date(n.createdAt).toLocaleString() : '—'}</td>
               <td>{n.sentAt ? new Date(n.sentAt).toLocaleString() : '—'}</td>
-              <td className="col-actions">
-                {onResend ? (
-                  <button type="button" className="btn btn-ghost btn-xs" onClick={() => onResend(n)}>
-                    {n.status === 'SENT' ? 'Resend' : 'Send'}
-                  </button>
-                ) : (<span className="muted">—</span>)}
-              </td>
             </tr>
           ))}
         </tbody>

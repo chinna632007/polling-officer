@@ -25,3 +25,7 @@ Thumbs.db
 # Google OAuth token store (mirrors mail-test-server.js)
 tokens.json
 
+
+# Encrypted Google OAuth token store
+tokens.enc
+tokens.json.bak

@@ -30,29 +30,6 @@ export default function Notifications() {
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
   const [notify, setNotify] = useState(null);
 
-  // Email notification modal state (uses the backend Gmail /api/mail/send endpoint).
-  const [mailOpen, setMailOpen] = useState(false);
-  const [mailForm, setMailForm] = useState({ to: '', subject: '', text: '' });
-  const [mailSending, setMailSending] = useState(false);
-
-  const openMailModal = () => {
-    setMailForm({ to: '', subject: '', text: '' });
-    setMailOpen(true);
-  };
-
-  const sendMail = async () => {
-    setMailSending(true);
-    try {
-      const { data } = await api.post('/api/mail/send', mailForm);
-      setNotify({ message: data.message || 'Email sent successfully', type: 'success' });
-      setMailOpen(false);
-    } catch (err) {
-      setNotify({ message: getErrorMessage(err), type: 'error' });
-    } finally {
-      setMailSending(false);
-    }
-  };
-
   /** Unique Mandal names from officers + booths (same source as Reports page). */
   const loadMandals = useCallback(async () => {
     try {
@@ -118,16 +95,6 @@ export default function Notifications() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [notifications]);
 
-  const doResend = async (n) => {
-    try {
-      const { data } = await api.post(`/api/notifications/resend/${n._id}`);
-      setNotify({ message: data.message || `Notification ${data.data?.status || ''}`, type: 'success' });
-      fetchNotifications().catch(() => {});
-    } catch (err) {
-      setNotify({ message: getErrorMessage(err), type: 'error' });
-    }
-  };
-
   return (
     <div className="page">
       {notify ? <Toast {...notify} onClose={() => setNotify(null)} /> : null}
@@ -136,16 +103,10 @@ export default function Notifications() {
         <div>
           <h1 className="page-title">Notifications</h1>
           <p className="page-subtitle">
-            SMS delivery status for every polling-duty message sent to officers
+            SMS delivery history + ID-card download ("Received") tracking for
+            every polling-duty message sent to officers
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={openMailModal}
-        >
-          Send Mail Notification
-        </button>
       </div>
 
       <div className="toolbar card">
@@ -202,11 +163,7 @@ export default function Notifications() {
             count={group.rows.length}
             defaultOpen
           >
-            <NotificationStatus
-              notifications={group.rows}
-              loading={false}
-              onResend={doResend}
-            />
+            <NotificationStatus notifications={group.rows} loading={false} />
           </MandalSection>
         ))
       )}
@@ -235,65 +192,6 @@ export default function Notifications() {
         </div>
       )}
 
-      {mailOpen && (
-        <div
-          className="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => !mailSending && setMailOpen(false)}
-        >
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal-title">Send Mail Notification</h3>
-            <p className="modal-message">
-              Send an email notification through the connected Gmail account.
-            </p>
-            <div style={{ display: 'grid', gap: 10 }}>
-              <input
-                className="input"
-                type="email"
-                placeholder="To (email address)"
-                value={mailForm.to}
-                disabled={mailSending}
-                onChange={(e) => setMailForm({ ...mailForm, to: e.target.value })}
-              />
-              <input
-                className="input"
-                type="text"
-                placeholder="Subject"
-                value={mailForm.subject}
-                disabled={mailSending}
-                onChange={(e) => setMailForm({ ...mailForm, subject: e.target.value })}
-              />
-              <textarea
-                className="input"
-                rows={5}
-                placeholder="Message"
-                value={mailForm.text}
-                disabled={mailSending}
-                onChange={(e) => setMailForm({ ...mailForm, text: e.target.value })}
-              />
-            </div>
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setMailOpen(false)}
-                disabled={mailSending}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={sendMail}
-                disabled={mailSending || !mailForm.to || !mailForm.subject || !mailForm.text}
-              >
-                {mailSending ? 'Sending...' : 'Send Mail'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

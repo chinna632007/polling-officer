@@ -1613,44 +1613,6 @@
         }
       }
     },
-    "/api/notifications/resend/{id}": {
-      "post": {
-        "tags": [
-          "Notifications"
-        ],
-        "summary": "Re-send an existing notification",
-        "description": "Roles: SUPER_ADMIN, ALLOCATION_OFFICER.",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ResourceId"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Notification re-sent with an updated status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessEnvelope"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          }
-        }
-      }
-    },
     "/api/reports/officers-excel": {
       "get": {
         "tags": [
@@ -1882,8 +1844,8 @@
         "tags": [
           "Mail"
         ],
-        "summary": "E-mail the polling-duty letter to one allocated officer",
-        "description": "Used by the dashboard Send Mail button. The letter text is identical to the SMS wording; the officer's `email` field is the recipient. 400 when the officer has no e-mail address, 503 while Gmail is not connected.",
+        "summary": "E-mail the ID-card download link to one allocated officer",
+        "description": "Used by the dashboard Send Mail button. The mail is short: it names the Mandal the officer was allocated to and contains the tokenised link to their Polling Duty ID card PDF - no attachment. Opening the link marks the card as received (idcards collection, `receivedAt`). The officer's `email` field is the recipient. 400 when the officer has no e-mail address, 503 while Gmail is not connected.",
         "parameters": [
           {
             "name": "allocationId",
@@ -1897,7 +1859,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Letter sent",
+            "description": "Mail sent",
             "content": {
               "application/json": {
                 "schema": {
@@ -2048,7 +2010,7 @@
         "tags": [
           "Mail"
         ],
-        "summary": "E-mail the polling-duty letter in bulk",
+        "summary": "E-mail the ID-card download link in bulk",
         "description": "Select recipients with `allocationIds`, with `mandal` (every ALLOCATED officer of that Mandal) or both. The response always contains a per-officer result list, so one failure never stops the run. Maximum 100 recipients per request.",
         "requestBody": {
           "required": true,

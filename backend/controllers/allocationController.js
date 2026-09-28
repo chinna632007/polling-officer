@@ -2,6 +2,7 @@
 const Officer = require('../models/Officer');
 const Booth = require('../models/Booth');
 const Notification = require('../models/Notification');
+const IdCard = require('../models/IdCard');
 const allocationService = require('../services/allocationService');
 const countService = require('../services/countService');
 const { scopeFilter, notificationScopeFilter, escapeRegex } = require('../services/roleService');
@@ -51,9 +52,34 @@ async function getAllocations(req, res, next) {
         .lean(),
       Allocation.countDocuments(filter),
     ]);
+
+    // Embed the ID-card "received" state per row so the UI can badge the
+    // ID Card button (Received once the officer opened the download link).
+    const allocIds = data.map((a) => String(a._id));
+    let cardsByAllocation = new Map();
+    if (allocIds.length) {
+      const cards = await IdCard.find({ allocationId: { $in: allocIds } })
+        .select('allocationId receivedAt downloadCount')
+        .lean();
+      cardsByAllocation = new Map(cards.map((c) => [String(c.allocationId), c]));
+    }
+    const rows = data.map((a) => {
+      const card = cardsByAllocation.get(String(a._id));
+      return {
+        ...a,
+        idCard: card
+          ? {
+              issued: true,
+              receivedAt: card.receivedAt || null,
+              downloadCount: card.downloadCount || 0,
+            }
+          : { issued: false, receivedAt: null, downloadCount: 0 },
+      };
+    });
+
     return res.json({
       success: true,
-      data,
+      data: rows,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     });
   } catch (error) {

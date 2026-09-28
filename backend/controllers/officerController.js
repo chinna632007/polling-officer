@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+
 const Officer = require('../models/Officer');
 const Allocation = require('../models/Allocation');
 const Booth = require('../models/Booth');
@@ -233,6 +235,81 @@ async function deleteAllOfficers(req, res, next) {
   }
 }
 
+/**
+ * Generates a collision-safe Employee ID for public self-registration.
+ * Excel imports use OFF001-style sequential IDs, so the timestamp-based
+ * suffix here can never collide with imported data.
+ */
+function generateOfficerId() {
+  const ts = Date.now().toString(36).toUpperCase();
+  const rand = crypto.randomBytes(2).toString('hex').toUpperCase();
+  return `OFF${ts}${rand}`;
+}
+
+/**
+ * POST /api/officers/register - PUBLIC employee self-registration (no JWT).
+ * No approval workflow: the record goes straight into the employees list and
+ * is immediately available to the admin for allocation. Employees never
+ * receive login credentials - only admins can log in.
+ */
+async function registerOfficer(req, res, next) {
+  try {
+    // Whitelist only the public fields - never spread req.body into the model.
+    const payload = {
+      officerName: req.body.officerName,
+      designation: req.body.designation,
+      mobileNumber: req.body.mobileNumber,
+      email: req.body.email || '',
+      mandal: req.body.mandal,
+      district: req.body.district || '',
+      houseNo: req.body.houseNo || '',
+      street: req.body.street || '',
+      locality: req.body.locality || '',
+      ward: req.body.ward || '',
+      pinCode: req.body.pinCode || '',
+    };
+
+    // Friendly duplicate check: one mobile number / e-mail = one record.
+    const dupConditions = [{ mobileNumber: payload.mobileNumber }];
+    if (payload.email) dupConditions.push({ email: payload.email });
+    const duplicate = await Officer.findOne({ $or: dupConditions })
+      .select('_id officerId')
+      .lean();
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        message: 'An employee with this mobile number or e-mail is already registered',
+      });
+    }
+
+    // Auto-generate the Employee ID (schema enforces uniqueness; retry on the
+    // astronomically unlikely collision).
+    let officer;
+    let lastError;
+    for (let attempt = 0; attempt < 5 && !officer; attempt += 1) {
+      try {
+        officer = await Officer.create({ ...payload, officerId: generateOfficerId() });
+      } catch (error) {
+        if (error.code === 11000) {
+          lastError = error; // duplicate key - regenerate and retry
+        } else {
+          throw error;
+        }
+      }
+    }
+    if (!officer) throw lastError || new Error('Could not allocate an Employee ID - please try again');
+
+    // Minimal response - never echo the full document back publicly.
+    return res.status(201).json({
+      success: true,
+      message: 'Registration successful - your details have been added to the employees list',
+      data: { officerId: officer.officerId, officerName: officer.officerName },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getOfficers,
   getOfficersGrouped,
@@ -241,4 +318,5 @@ module.exports = {
   deleteOfficer,
   deleteAllOfficers,
   buildOfficerFilter,
+  registerOfficer,
 };

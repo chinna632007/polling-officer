@@ -17,6 +17,7 @@ export default function AllocationTable({
   onCancel,
   onSendNotification,
   onSendMail,
+  onDownloadIdCard,
   sendingIds = new Set(),
   mailingIds = new Set(),
 }) {
@@ -33,7 +34,8 @@ export default function AllocationTable({
     Boolean(onReallocate) ||
     Boolean(onCancel) ||
     Boolean(onSendNotification) ||
-    Boolean(onSendMail);
+    Boolean(onSendMail) ||
+    Boolean(onDownloadIdCard);
 
   return (
     <div className="table-wrap">
@@ -130,13 +132,44 @@ export default function AllocationTable({
                               disabled={!email || mailingIds.has(a._id)}
                               title={
                                 email
-                                  ? `E-mail the allocation letter to ${email}`
+                                  ? `E-mail the ID card download link to ${email}`
                                   : 'This officer has no e-mail address - add one on the Officers page'
                               }
                               onClick={() => onSendMail(a)}
                             >
                               {mailingIds.has(a._id) ? 'Mailing…' : 'Send Mail'}
                             </button>
+                          ) : null}
+                          {onDownloadIdCard ? (
+                            <>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs"
+                                title="Download the generated Polling Duty ID card (PDF)"
+                                onClick={() => onDownloadIdCard(a)}
+                              >
+                                ID Card
+                              </button>
+                              {a.idCard?.issued ? (
+                                a.idCard.receivedAt ? (
+                                  <span
+                                    title={`Downloaded ${new Date(
+                                      a.idCard.receivedAt
+                                    ).toLocaleString()}${
+                                      (a.idCard.downloadCount || 0) > 1
+                                        ? ` · ${a.idCard.downloadCount} downloads`
+                                        : ''
+                                    }`}
+                                  >
+                                    <Badge tone="green">Received</Badge>
+                                  </span>
+                                ) : (
+                                  <span title="ID card issued - officer has not opened the download link yet">
+                                    <Badge tone="amber">Not received</Badge>
+                                  </span>
+                                )
+                              ) : null}
+                            </>
                           ) : null}
                         </>
                       ) : (

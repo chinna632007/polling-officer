@@ -6,6 +6,7 @@ import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Officers from './pages/Officers';
 import Booths from './pages/Booths';
@@ -30,7 +31,10 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/register" element={<Register />} />
+      {/* Public visitors land on the employee registration page; the admin
+          login page stays reachable via the link shown there. */}
+      <Route path="/" element={<Navigate to="/register" replace />} />
       <Route
         path="/*"
         element={
