@@ -9,6 +9,8 @@ const NAV_ITEMS = [
   { to: '/booths', label: 'Booths' },
   { to: '/allocation', label: 'Allocation' },
   { to: '/notifications', label: 'Notifications' },
+  { to: '/settings/notifications', label: 'Message Settings' },
+  { to: '/settings/idcard', label: 'ID Card Designer' },
   { to: '/reports', label: 'Reports' },
 ];
 

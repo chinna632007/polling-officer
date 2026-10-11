@@ -16,6 +16,8 @@ const boothRoutes = require('./routes/boothRoutes');
 const allocationRoutes = require('./routes/allocationRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
+const webhookRoutes = require('./routes/webhookRoutes');
 const reportsRoutes = require('./routes/reportsRoutes');
 const idCardRoutes = require('./routes/idCardRoutes');
 
@@ -122,6 +124,9 @@ app.use(cors({
   credentials: true, // the session cookie must ride along on cross-origin calls
 }));
 app.disable('x-powered-by');
+// Delivery-status webhooks mount BEFORE express.json(): the WhatsApp route
+// needs the exact raw bytes for HMAC signature verification.
+app.use('/api/webhooks', webhookRoutes);
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 // Neutralize NoSQL-injection vectors: strips $-prefixed and dotted keys out of
@@ -168,6 +173,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/idcards', idCardRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // NOTE: the public /static file mount was REMOVED - it served the uploads
 // folder with no authentication, so anything that ever landed there would be
@@ -559,18 +565,27 @@ async function seedMainAdmin() {
   }
 }
 
-const PORT = process.env.PORT || 5002;
-
+// ---------------------------------------------------------------
+//  SERVER STARTUP
+// ---------------------------------------------------------------
+// Connect to MongoDB and seed the Main Admin whenever this module loads.
+// This runs for both the real server AND the test suite (which requires this
+// module), so a DB connection is always ready. connectDB() reads
+// MONGODB_URI from the environment, so tests that set MONGODB_URI before
+// requiring this file get their own isolated test database.
 (async function start() {
   await connectDB();
   await seedMainAdmin();
 
-  app.listen(PORT,'0.0.0.0', () => {
-    console.log(`[SERVER] Smart Polling Allocation API running on http://localhost:${PORT}`);
-    if (ENABLE_SWAGGER) {
-      console.log(`[SERVER] Swagger docs : http://localhost:${PORT}/api-docs (Basic-Auth login required)`);
-    } else {
-      console.log('[SERVER] Swagger docs disabled (ENABLE_SWAGGER=false)');
-    }
-  });
+  // Only bind a port when run directly (node server.js / nodemon server.js).
+  // Tests require this module and start their own throwaway server, so we must
+  // NOT listen here in that case - it would collide or bind the wrong port.
+  if (require.main === module) {
+    const port = process.env.PORT || 5000;
+    app.listen(port, '0.0.0.0', () => {
+      console.log(`[SERVER] Polling Officer Allocation API running on http://localhost:${port}`);
+    });
+  }
 })();
+
+module.exports = { app, connectDB, seedMainAdmin };

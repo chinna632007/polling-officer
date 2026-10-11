@@ -13,6 +13,8 @@ import Booths from './pages/Booths';
 import UploadExcel from './pages/UploadExcel';
 import Allocation from './pages/Allocation';
 import Notifications from './pages/Notifications';
+import NotificationSettings from './pages/NotificationSettings';
+import IdCardDesigner from './pages/IdCardDesigner';
 import Reports from './pages/Reports';
 
 function ProtectedRoute({ children }) {
@@ -52,6 +54,8 @@ export default function App() {
                     <Route path="/upload" element={<UploadExcel />} />
                     <Route path="/allocation" element={<Allocation />} />
                     <Route path="/notifications" element={<Notifications />} />
+                    <Route path="/settings/notifications" element={<NotificationSettings />} />
+                    <Route path="/settings/idcard" element={<IdCardDesigner />} />
                     <Route path="/reports" element={<Reports />} />
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />

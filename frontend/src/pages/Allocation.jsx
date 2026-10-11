@@ -222,12 +222,16 @@ export default function Allocation() {
       setCancelling(false);
     }
   };
-  const doSendNotification = async (allocation) => {
-    setSendingIds((prev) => new Set(prev).add(allocation._id));
+  const doSendNotification = async (allocation, channels) => {
+    const key = channels ? `${channels.join('+')}:${allocation._id}` : allocation._id;
+    setSendingIds((prev) => new Set(prev).add(key).add(allocation._id));
     try {
-      const { data } = await api.post(`/api/notifications/send/${allocation._id}`);
+      const { data } = await api.post(`/api/notifications/send/${allocation._id}`, {
+        channels: channels || ['sms', 'whatsapp', 'email'],
+        idempotencyKey: `${Date.now()}`,
+      });
       setNotify({
-        message: data.message || 'Notification saved with status SENT.',
+        message: data.message || 'Notifications sent.',
         type: 'success',
       });
     } catch (err) {
@@ -235,6 +239,7 @@ export default function Allocation() {
     } finally {
       setSendingIds((prev) => {
         const next = new Set(prev);
+        next.delete(key);
         next.delete(allocation._id);
         return next;
       });
@@ -637,7 +642,7 @@ export default function Allocation() {
       <ConfirmModal
         open={confirmNotifyAll}
         title="Notify All Allocated Officers"
-        message={`Send the polling-duty SMS notification to the ${allocatedList.length} allocated officer(s)? Officers without a mobile number are skipped automatically (up to 100 per run).`}
+        message={`Send SMS + WhatsApp + Email to the ${allocatedList.length} allocated officer(s)? Officers without a mobile number or email are skipped automatically (up to 100 per run). Each officer is messaged once — repeat clicks reuse the same record.`}
         confirmLabel="Send Notifications"
         loading={notifyingAll}
         onConfirm={doNotifyAll}

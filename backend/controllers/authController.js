@@ -47,14 +47,16 @@ async function login(req, res, next) {
     // Rotate the session id on privilege change (login) to prevent session
     // fixation, then bind the admin to the fresh session.
     req.session.regenerate((regenErr) => {
-      if (regenErr) return next(regenErr);
+      if (regenErr) return next(new Error('[AUTH] session.regenerate failed: ' + regenErr.message));
       req.session.adminId = user._id.toString();
       req.session.save((saveErr) => {
-        if (saveErr) return next(saveErr);
+        if (saveErr) return next(new Error('[AUTH] session.save failed: ' + saveErr.message));
         return res.json({ success: true, user: sanitizeUser(user) });
       });
     });
   } catch (error) {
+    console.error('[AUTH] login() thrown:', error.message);
+    console.error('[AUTH] login() stack:', error.stack);
     next(error);
   }
 }

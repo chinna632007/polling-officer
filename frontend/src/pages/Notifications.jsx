@@ -4,9 +4,31 @@ import NotificationStatus from '../components/NotificationStatus';
 import MandalSection from '../components/MandalSection';
 import Spinner from '../components/Spinner';
 import Toast from '../components/Toast';
+import Badge from '../components/Badge';
 import { compareOfficerIds } from '../utils/naturalSort';
 
-const STATUS_FILTERS = ['', 'PENDING', 'SENT', 'FAILED', 'DEMO_SENT'];
+const STATUS_FILTERS = ['', 'PENDING', 'ACCEPTED', 'SENT', 'DELIVERED', 'READ', 'FAILED', 'SKIPPED', 'DEMO_SENT'];
+const CHANNEL_FILTERS = [
+  { id: '', label: 'All Channels' },
+  { id: 'sms', label: 'SMS' },
+  { id: 'whatsapp', label: 'WhatsApp' },
+  { id: 'email', label: 'Email' },
+];
+
+/** Plain-words status for elders/newbies: technical code -> friendly label. */
+export function friendlyStatus(status) {
+  switch (String(status || '').toUpperCase()) {
+    case 'PENDING': return 'Waiting to send';
+    case 'ACCEPTED': return 'Sent to WhatsApp';
+    case 'SENT': return 'Sent';
+    case 'DELIVERED': return 'Delivered';
+    case 'READ': return 'Seen by officer';
+    case 'FAILED': return 'Failed — can retry';
+    case 'SKIPPED': return 'Skipped';
+    case 'DEMO_SENT': return 'Demo sent (no real SMS)';
+    default: return status || '—';
+  }
+}
 
 /** Mandal name of a notification row: snapshot -> officer -> booth fallback. */
 function mandalOf(n) {
@@ -24,10 +46,13 @@ export default function Notifications() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
+  const [channel, setChannel] = useState('');
   const [mandal, setMandal] = useState('');
   const [mandals, setMandals] = useState([]);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
+  const [summary, setSummary] = useState(null);
+  const [retryingIds, setRetryingIds] = useState(new Set());
   const [notify, setNotify] = useState(null);
 
   /** Unique Mandal names from officers + booths (same source as Reports page). */
@@ -60,16 +85,21 @@ export default function Notifications() {
     try {
       const params = { page };
       if (status) params.status = status;
+      if (channel) params.channel = channel;
       if (mandal) params.mandal = mandal;
-      const { data } = await api.get('/api/notifications', { params });
+      const [{ data }, sumRes] = await Promise.all([
+        api.get('/api/notifications', { params }),
+        api.get('/api/notifications/summary', { params: mandal ? { mandal } : {} }).catch(() => null),
+      ]);
       setNotifications(data.data);
       setPagination(data.pagination);
+      if (sumRes?.data?.data) setSummary(sumRes.data.data);
     } catch (err) {
       setNotify({ message: getErrorMessage(err), type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [page, status, mandal]);
+  }, [page, status, channel, mandal]);
 
   useEffect(() => {
     fetchNotifications().catch(() => {});
@@ -78,6 +108,23 @@ export default function Notifications() {
   useEffect(() => {
     loadMandals().catch(() => {});
   }, [loadMandals]);
+
+  const doRetry = async (n) => {
+    setRetryingIds((prev) => new Set(prev).add(n._id));
+    try {
+      const { data } = await api.post(`/api/notifications/retry/${n._id}`);
+      setNotify({ message: data.message || 'Retry sent.', type: 'success' });
+      await fetchNotifications();
+    } catch (err) {
+      setNotify({ message: getErrorMessage(err), type: 'error', duration: 8000 });
+    } finally {
+      setRetryingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(n._id);
+        return next;
+      });
+    }
+  };
 
   // Mandal-wise grouping: Mandals ascending, officers inside by numeric ID.
   const notificationGroups = useMemo(() => {
@@ -103,10 +150,39 @@ export default function Notifications() {
         <div>
           <h1 className="page-title">Notifications</h1>
           <p className="page-subtitle">
-            SMS delivery history + ID-card download ("Received") tracking for
-            every polling-duty message sent to officers
+            SMS + WhatsApp + Email history for every polling-duty message.
+            Green means delivered, red means failed (press Retry).
           </p>
         </div>
+      </div>
+
+      {summary ? (
+        <div className="stat-grid">
+          {['sms', 'whatsapp', 'email'].map((ch) => {
+            const s = summary.byChannel?.[ch] || {};
+            const ok = (s.SENT || 0) + (s.DELIVERED || 0) + (s.READ || 0) + (s.ACCEPTED || 0) + (s.DEMO_SENT || 0);
+            const bad = s.FAILED || 0;
+            return (
+              <div className="card stat-card" key={ch}>
+                <span className="muted" style={{ textTransform: 'capitalize' }}>{ch}</span>
+                <strong style={{ fontSize: 20 }}>✔ {ok} sent · ✖ {bad} failed</strong>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="tab-row">
+        {CHANNEL_FILTERS.map((c) => (
+          <button
+            key={c.id || 'all'}
+            type="button"
+            className={`tab-btn ${channel === c.id ? 'active' : ''}`}
+            onClick={() => { setChannel(c.id); setPage(1); }}
+          >
+            {c.label}
+          </button>
+        ))}
       </div>
 
       <div className="toolbar card">
@@ -120,7 +196,7 @@ export default function Notifications() {
         >
           {STATUS_FILTERS.map((s) => (
             <option key={s || 'all'} value={s}>
-              {s || 'All Statuses'}
+              {s ? friendlyStatus(s) : 'All Statuses'}
             </option>
           ))}
         </select>
@@ -142,6 +218,7 @@ export default function Notifications() {
           className="btn btn-ghost"
           onClick={() => {
             setStatus('');
+            setChannel('');
             setMandal('');
             setPage(1);
           }}
@@ -163,7 +240,7 @@ export default function Notifications() {
             count={group.rows.length}
             defaultOpen
           >
-            <NotificationStatus notifications={group.rows} loading={false} />
+            <NotificationStatus notifications={group.rows} loading={false} onRetry={doRetry} retryingIds={retryingIds} />
           </MandalSection>
         ))
       )}

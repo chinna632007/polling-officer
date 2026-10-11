@@ -116,14 +116,35 @@ export default function AllocationTable({
                             </button>
                           ) : null}
                           {onSendNotification ? (
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-xs"
-                              disabled={sendingIds.has(a._id)}
-                              onClick={() => onSendNotification(a)}
-                            >
-                              {sendingIds.has(a._id) ? 'Sending…' : 'Send Notification'}
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-xs"
+                                disabled={sendingIds.has(a._id)}
+                                title="Send SMS + WhatsApp + Email together"
+                                onClick={() => onSendNotification(a)}
+                              >
+                                {sendingIds.has(a._id) ? 'Sending…' : 'Notify All'}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs"
+                                disabled={sendingIds.has(`sms:${a._id}`)}
+                                title={a.officer?.mobileNumber ? `Send SMS to ${a.officer.mobileNumber}` : 'No mobile number'}
+                                onClick={() => onSendNotification(a, ['sms'])}
+                              >
+                                {sendingIds.has(`sms:${a._id}`) ? 'SMS…' : 'SMS'}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs"
+                                disabled={sendingIds.has(`whatsapp:${a._id}`)}
+                                title={a.officer?.mobileNumber ? `Send WhatsApp to ${a.officer.mobileNumber}` : 'No mobile number'}
+                                onClick={() => onSendNotification(a, ['whatsapp'])}
+                              >
+                                {sendingIds.has(`whatsapp:${a._id}`) ? 'WA…' : 'WhatsApp'}
+                              </button>
+                            </>
                           ) : null}
                           {onSendMail ? (
                             <button
